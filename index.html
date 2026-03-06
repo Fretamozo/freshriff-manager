@@ -2041,24 +2041,12 @@
         </div>
     </div>
 
-    <!-- ANTES de tu </body>, reemplaza TODO el script actual con esto: -->
-    <script type="module">
-        // 🔴 REEMPLAZA ESTO con tu firebaseConfig del paso 3
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import {
-            getFirestore,
-            collection,
-            doc,
-            setDoc,
-            getDoc,
-            onSnapshot,
-            query,
-            where,
-            getDocs,
-            deleteDoc
-        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <!-- REEMPLAZA TODO EL SCRIPT ACTUAL CON ESTO -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
-        // 🔴 REEMPLAZAR: Pega aquí tu firebaseConfig
+    <script>
+        // 🔴 REEMPLAZA con tu firebaseConfig
         const firebaseConfig = {
             apiKey: "AIzaSyDITBqeb39WP2m6wCuTgVyKHwTLg2kIjYc",
             authDomain: "freshriff-manager.firebaseapp.com",
@@ -2068,9 +2056,9 @@
             appId: "1:208409965363:web:8b2f370990a153a9518446"
         };
 
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        // Inicializar Firebase (versión compat, no module)
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
         // CREDENCIALES DE ADMINISTRADOR
         const ADMIN_CREDENTIALS = {
@@ -2078,7 +2066,7 @@
             password: "@HoraDeAventura23"
         };
 
-        // Datos en memoria (ahora sincronizados con Firebase)
+        // Variables globales
         let appData = { accounts: [], clients: [], payments: [] };
         let currentSort = "asc";
         let currentCart = [];
@@ -2091,6 +2079,7 @@
         let selectedRenewalMonths = 1;
         let renewalCostPreview = 0;
         let isDataLoaded = false;
+        let unsubscribe = null;
 
         const MONTH_NAMES = [
             "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -2105,73 +2094,77 @@
             "YouTube Premium": { icon: "▶️", color: "youtube", hasSubtypes: false, profiles: 5 },
         };
 
-        // 🔥 NUEVO: Guardar datos en Firebase (reemplaza a localStorage)
-        async function saveData() {
-            try {
-                await setDoc(doc(db, "appData", "main"), {
-                    accounts: appData.accounts,
-                    clients: appData.clients,
-                    payments: appData.payments,
-                    lastUpdated: new Date().toISOString()
-                });
-                console.log("✅ Datos guardados en Firebase");
-            } catch (error) {
+        // 🔥 GUARDAR en Firebase
+        function saveData() {
+            return db.collection("appData").doc("main").set({
+                accounts: appData.accounts,
+                clients: appData.clients,
+                payments: appData.payments,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(() => {
+                console.log("✅ Guardado en Firebase");
+            }).catch((error) => {
                 console.error("❌ Error guardando:", error);
-                alert("Error de conexión. Verifica tu internet.");
-            }
+                // Fallback a localStorage
+                localStorage.setItem("freshRiffData", JSON.stringify(appData));
+                alert("Error de conexión. Datos guardados localmente temporalmente.");
+            });
         }
 
-        // 🔥 NUEVO: Cargar datos desde Firebase (reemplaza a localStorage)
-        async function loadData() {
-            try {
-                const docRef = doc(db, "appData", "main");
-                const docSnap = await getDoc(docRef);
-
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
+        // 🔥 CARGAR desde Firebase
+        function loadData() {
+            return db.collection("appData").doc("main").get().then((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
                         payments: data.payments || []
                     };
-                    console.log("✅ Datos cargados desde Firebase");
+                    console.log("✅ Cargado desde Firebase");
                 } else {
-                    // Primera vez - crear documento vacío
-                    await saveData();
+                    // Intentar cargar desde localStorage como migración
+                    const saved = localStorage.getItem("freshRiffData");
+                    if (saved) {
+                        appData = JSON.parse(saved);
+                        // Guardar en Firebase para futuro
+                        return saveData();
+                    }
                 }
                 isDataLoaded = true;
                 updateAllViews();
-            } catch (error) {
+            }).catch((error) => {
                 console.error("❌ Error cargando:", error);
-                // Fallback: intentar cargar de localStorage temporalmente
+                // Fallback a localStorage
                 const saved = localStorage.getItem("freshRiffData");
                 if (saved) {
                     appData = JSON.parse(saved);
                     updateAllViews();
                 }
-            }
+            });
         }
 
-        // 🔥 NUEVO: Escuchar cambios en tiempo real
+        // 🔥 Escuchar cambios en tiempo real
         function setupRealtimeListener() {
-            const docRef = doc(db, "appData", "main");
-            onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
+            unsubscribe = db.collection("appData").doc("main").onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
                         payments: data.payments || []
                     };
-                    // Solo actualizar vistas si no estamos en medio de una edición
+                    // Solo actualizar si no hay modal abierto
                     if (!document.querySelector('.modal.active')) {
                         updateAllViews();
                     }
                 }
+            }, (error) => {
+                console.error("Error en listener:", error);
             });
         }
 
-        // Verificar autenticación al cargar
+        // Inicialización
         document.addEventListener("DOMContentLoaded", () => {
             const isAuthenticated = sessionStorage.getItem("freshRiffAuth") === "true";
 
@@ -2189,7 +2182,6 @@
 
         function handleLogin(event) {
             event.preventDefault();
-
             const email = document.getElementById("loginEmail").value.trim();
             const password = document.getElementById("loginPassword").value;
             const errorDiv = document.getElementById("loginError");
@@ -2199,8 +2191,6 @@
                 sessionStorage.setItem("freshRiffUser", email);
                 errorDiv.classList.remove("show");
                 showMainContent();
-
-                // Cargar datos de Firebase al loguearse
                 loadData().then(() => {
                     setupRealtimeListener();
                 });
@@ -2221,35 +2211,29 @@
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("mainContent").style.display = "block";
             document.getElementById("mainContent").classList.add("authenticated");
-
             const userEmail = sessionStorage.getItem("freshRiffUser");
             if (userEmail) {
                 document.getElementById("userEmailDisplay").textContent = userEmail;
             }
-
             document.getElementById("clientPaymentDate").valueAsDate = new Date();
             document.getElementById("paymentDate").valueAsDate = new Date();
         }
 
         function logout() {
             if (confirm("¿Cerrar sesión?")) {
+                if (unsubscribe) unsubscribe();
                 sessionStorage.removeItem("freshRiffAuth");
                 sessionStorage.removeItem("freshRiffUser");
                 location.reload();
             }
         }
 
-        // ... (resto de funciones helper: formatDate, calculateExpiryDate, etc. - mantener igual)
-
+        // Funciones helper
         function formatDate(dateString) {
             if (!dateString) return "-";
             const date = new Date(dateString);
             if (isNaN(date.getTime())) return dateString;
-            return date.toLocaleDateString("es-ES", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-            });
+            return date.toLocaleDateString("es-ES", { day: '2-digit', month: '2-digit', year: 'numeric' });
         }
 
         function calculateExpiryDate(startDate, monthsToAdd) {
@@ -2263,14 +2247,12 @@
         function getExactDaysBetween(startDate, endDate) {
             const start = new Date(startDate);
             const end = new Date(endDate);
-            const diffTime = end - start;
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
         }
 
-        function generateUniquePIN(customPin = null) {
+        function generateUniquePIN(customPin) {
             if (customPin && customPin.length === 4 && /^\d{4}$/.test(customPin)) {
-                if (!appData.clients.some((c) => c.pin === customPin))
-                    return customPin;
+                if (!appData.clients.some((c) => c.pin === customPin)) return customPin;
                 alert("El PIN personalizado ya está en uso. Se generará uno automático.");
             }
             let pin;
@@ -2285,8 +2267,7 @@
             const today = new Date();
             end.setHours(0, 0, 0, 0);
             today.setHours(0, 0, 0, 0);
-            const diff = end - today;
-            return Math.ceil(diff / (1000 * 60 * 60 * 24));
+            return Math.ceil((end - today) / (1000 * 60 * 60 * 24));
         }
 
         function getStatusByDays(days) {
@@ -2317,8 +2298,8 @@
 
         function generateMonthSelector() {
             const container = document.getElementById("monthSelector");
+            if (!container) return;
             container.innerHTML = "";
-
             const currentDate = new Date();
             const currentMonth = currentDate.getMonth();
             const currentYear = currentDate.getFullYear();
@@ -2327,14 +2308,10 @@
                 const date = new Date(currentYear, currentMonth + i, 1);
                 const month = date.getMonth();
                 const year = date.getFullYear();
-
                 const btn = document.createElement("button");
-                btn.className = "month-btn";
-                if (month === selectedMonth && year === selectedYear) {
-                    btn.classList.add("active");
-                }
+                btn.className = "month-btn" + (month === selectedMonth && year === selectedYear ? " active" : "");
                 btn.textContent = `${MONTH_NAMES[month]} ${year}`;
-                btn.onclick = () => {
+                btn.onclick = function () {
                     selectedMonth = month;
                     selectedYear = year;
                     generateMonthSelector();
@@ -2348,7 +2325,7 @@
             document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
             document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
             document.getElementById(sectionId).classList.add("active");
-            event.target.classList.add("active");
+            if (event && event.target) event.target.classList.add("active");
             if (sectionId === "clients") renderClients();
             if (sectionId === "accounts") renderAccounts();
             if (sectionId === "payments") updateFinanceView();
@@ -2368,16 +2345,28 @@
         }
 
         function resetAccountForm() {
-            document.getElementById("accountForm").reset();
-            document.getElementById("deviceTypeContainer").style.display = "none";
-            document.getElementById("accDeviceType").required = false;
+            const form = document.getElementById("accountForm");
+            if (form) form.reset();
+            const deviceContainer = document.getElementById("deviceTypeContainer");
+            const deviceSelect = document.getElementById("accDeviceType");
+            if (deviceContainer) deviceContainer.style.display = "none";
+            if (deviceSelect) {
+                deviceSelect.required = false;
+                deviceSelect.value = "";
+            }
         }
 
         function resetClientForm() {
-            document.getElementById("clientForm").style.display = "block";
-            document.getElementById("registrationResult").style.display = "none";
-            document.getElementById("priceSummary").style.display = "none";
-            document.getElementById("clientPaymentDate").valueAsDate = new Date();
+            const clientForm = document.getElementById("clientForm");
+            const regResult = document.getElementById("registrationResult");
+            const priceSummary = document.getElementById("priceSummary");
+            const paymentDate = document.getElementById("clientPaymentDate");
+
+            if (clientForm) clientForm.style.display = "block";
+            if (regResult) regResult.style.display = "none";
+            if (priceSummary) priceSummary.style.display = "none";
+            if (paymentDate) paymentDate.valueAsDate = new Date();
+
             currentCart = [];
             updatePlatformSelection();
         }
@@ -2388,28 +2377,27 @@
             const deviceSelect = document.getElementById("accDeviceType");
 
             if (platform === "Netflix") {
-                deviceContainer.style.display = "block";
-                deviceSelect.required = true;
-                deviceContainer.classList.add("required-field");
+                if (deviceContainer) deviceContainer.style.display = "block";
+                if (deviceSelect) deviceSelect.required = true;
             } else {
-                deviceContainer.style.display = "none";
-                deviceSelect.required = false;
-                deviceSelect.value = "";
-                deviceContainer.classList.remove("required-field");
+                if (deviceContainer) deviceContainer.style.display = "none";
+                if (deviceSelect) {
+                    deviceSelect.required = false;
+                    deviceSelect.value = "";
+                }
             }
         }
 
         function validateDeviceType() {
             const deviceType = document.getElementById("accDeviceType").value;
             const container = document.getElementById("deviceTypeContainer");
-            if (deviceType) {
-                container.classList.remove("required-field");
+            if (deviceType && container) {
                 container.style.borderColor = "#e50914";
             }
         }
 
         // ========== CUENTAS ==========
-        document.getElementById("accountForm").addEventListener("submit", async (e) => {
+        document.getElementById("accountForm").addEventListener("submit", function (e) {
             e.preventDefault();
             const platform = document.getElementById("accPlatform").value;
             let deviceType = "Todos";
@@ -2419,7 +2407,6 @@
                 deviceType = document.getElementById("accDeviceType").value;
                 if (!deviceType) {
                     alert("⚠️ Debes seleccionar el tipo de dispositivo para Netflix");
-                    document.getElementById("deviceTypeContainer").classList.add("required-field");
                     return;
                 }
                 maxProfiles = PLATFORM_CONFIG[platform].subtypes[deviceType].profiles;
@@ -2446,10 +2433,11 @@
             };
 
             appData.accounts.push(newAccount);
-            await saveData(); // 🔥 Guardar en Firebase
-            closeModal("accountModal");
-            updateAllViews();
-            alert("✅ Cuenta registrada exitosamente");
+            saveData().then(() => {
+                closeModal("accountModal");
+                updateAllViews();
+                alert("✅ Cuenta registrada exitosamente");
+            });
         });
 
         function editAccount(id) {
@@ -2466,16 +2454,16 @@
 
             const deviceGroup = document.getElementById("editDeviceTypeGroup");
             if (account.platform === "Netflix") {
-                deviceGroup.style.display = "block";
+                if (deviceGroup) deviceGroup.style.display = "block";
                 document.getElementById("editAccDeviceType").value = account.deviceType;
             } else {
-                deviceGroup.style.display = "none";
+                if (deviceGroup) deviceGroup.style.display = "none";
             }
 
             openModal("editAccountModal");
         }
 
-        document.getElementById("editAccountForm").addEventListener("submit", async (e) => {
+        document.getElementById("editAccountForm").addEventListener("submit", function (e) {
             e.preventDefault();
             const id = parseInt(document.getElementById("editAccId").value);
             const account = appData.accounts.find((a) => a.id === id);
@@ -2487,14 +2475,15 @@
                 account.cost = parseFloat(document.getElementById("editAccCost").value);
                 account.nextPayment = document.getElementById("editAccNextPayment").value;
 
-                await saveData(); // 🔥 Guardar en Firebase
-                closeModal("editAccountModal");
-                updateAllViews();
-                alert("✅ Cuenta actualizada exitosamente");
+                saveData().then(() => {
+                    closeModal("editAccountModal");
+                    updateAllViews();
+                    alert("✅ Cuenta actualizada exitosamente");
+                });
             }
         });
 
-        async function deleteCurrentAccount() {
+        function deleteCurrentAccount() {
             const id = parseInt(document.getElementById("editAccId").value);
             const account = appData.accounts.find((a) => a.id === id);
             if (!account) return;
@@ -2507,10 +2496,11 @@
 
             if (confirm("¿Eliminar esta cuenta permanentemente?")) {
                 appData.accounts = appData.accounts.filter((a) => a.id !== id);
-                await saveData(); // 🔥 Guardar en Firebase
-                closeModal("editAccountModal");
-                updateAllViews();
-                alert("✅ Cuenta eliminada");
+                saveData().then(() => {
+                    closeModal("editAccountModal");
+                    updateAllViews();
+                    alert("✅ Cuenta eliminada");
+                });
             }
         }
 
@@ -2518,7 +2508,7 @@
             const account = appData.accounts.find((a) => a.id === accountId);
             if (account) {
                 account.pricePerProfile = parseFloat(newPrice);
-                saveData(); // 🔥 Guardar en Firebase (async no necesario aquí)
+                saveData();
             }
         }
 
@@ -2526,13 +2516,15 @@
             const account = appData.accounts.find((a) => a.id === accountId);
             if (account) {
                 account.cost = parseFloat(newCost);
-                saveData(); // 🔥 Guardar en Firebase
+                saveData();
             }
         }
 
         function renderAccounts() {
             const grid = document.getElementById("accountsGrid");
             const quickEditor = document.getElementById("quickPriceEditor");
+            if (!grid || !quickEditor) return;
+
             grid.innerHTML = "";
             quickEditor.innerHTML = "";
 
@@ -2551,16 +2543,16 @@
                             ${account.platform === "Netflix" ? `<span class="platform-subtype">${account.deviceType}</span>` : ""}
                         </div>
                     </div>
-                    <button onclick="window.editAccount(${account.id})" style="background: none; border: none; color: var(--accent-primary); cursor: pointer; font-size: 16px;">✏️</button>
+                    <button onclick="editAccount(${account.id})" style="background: none; border: none; color: var(--accent-primary); cursor: pointer; font-size: 16px;">✏️</button>
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <div style="flex: 1;">
                         <label style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Precio Perfil</label>
-                        <input type="number" value="${account.pricePerProfile.toFixed(2)}" onchange="window.quickUpdatePrice(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%;" step="0.01">
+                        <input type="number" value="${account.pricePerProfile.toFixed(2)}" onchange="quickUpdatePrice(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%;" step="0.01">
                     </div>
                     <div style="flex: 1;">
                         <label style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Tu Costo</label>
-                        <input type="number" value="${account.cost.toFixed(2)}" onchange="window.quickUpdateCost(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%; border-color: rgba(239, 68, 68, 0.3);" step="0.01">
+                        <input type="number" value="${account.cost.toFixed(2)}" onchange="quickUpdateCost(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%; border-color: rgba(239, 68, 68, 0.3);" step="0.01">
                     </div>
                 </div>
             `;
@@ -2586,7 +2578,7 @@
                         </div>
                     </div>
                     <div class="action-btns">
-                        <button class="btn btn-secondary" onclick="window.editAccount(${account.id})" style="padding: 6px 12px; font-size: 11px;">✏️</button>
+                        <button class="btn btn-secondary" onclick="editAccount(${account.id})" style="padding: 6px 12px; font-size: 11px;">✏️</button>
                     </div>
                 </div>
                 <div style="margin-bottom: 10px; font-size: 13px; color: var(--text-secondary);">
@@ -2611,7 +2603,7 @@
         // ========== CLIENTES ==========
         function updateDatePreview(container, durationMonths) {
             const paymentDateInput = document.getElementById("clientPaymentDate");
-            if (!paymentDateInput.value) return;
+            if (!paymentDateInput || !paymentDateInput.value) return;
 
             const startDate = new Date(paymentDateInput.value);
             const endDate = calculateExpiryDate(startDate, durationMonths);
@@ -2640,6 +2632,7 @@
 
         function updatePlatformSelection() {
             const container = document.getElementById("platformSelection");
+            if (!container) return;
             container.innerHTML = "";
 
             const availableAccounts = appData.accounts.filter((acc) =>
@@ -2684,17 +2677,17 @@
                 <div style="display: flex; gap: 15px; align-items: center;">
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
-                        <select class="duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="window.updatePriceSummary(); window.updateDatePreview(this.closest('.card'), parseInt(this.value));">
+                        <select class="duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updatePriceSummary(); updateDatePreview(this.closest('.card'), parseInt(this.value));">
                             <option value="1">1 Mes</option>
                             <option value="3">3 Meses (-12%)</option>
                         </select>
                     </div>
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: var(--text-secondary);">Cantidad</label>
-                        <input type="number" class="quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="window.updatePriceSummary()">
+                        <input type="number" class="quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="updatePriceSummary()">
                     </div>
                     <div style="display: flex; align-items: end; height: 100%;">
-                        <button type="button" class="btn btn-primary" onclick="window.addToCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
+                        <button type="button" class="btn btn-primary" onclick="addToCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
                     </div>
                 </div>
             `;
@@ -2703,7 +2696,8 @@
             });
         }
 
-        function addToCart(platform, deviceType, ...accountIds) {
+        function addToCart(platform, deviceType) {
+            const accountIds = Array.prototype.slice.call(arguments, 2);
             const accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
             const available = accounts.reduce(
                 (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
@@ -2760,6 +2754,7 @@
         function updatePriceSummary() {
             const summary = document.getElementById("priceSummary");
             const content = document.getElementById("summaryContent");
+            if (!summary || !content) return;
 
             if (currentCart.length === 0) {
                 summary.style.display = "none";
@@ -2871,7 +2866,7 @@
             content.innerHTML = html;
         }
 
-        document.getElementById("clientForm").addEventListener("submit", async (e) => {
+        document.getElementById("clientForm").addEventListener("submit", function (e) {
             e.preventDefault();
             if (currentCart.length === 0) {
                 alert("⚠️ Agrega al menos una plataforma al carrito");
@@ -2932,10 +2927,11 @@
             };
 
             appData.clients.push(client);
-            await saveData(); // 🔥 Guardar en Firebase
-            showRegistrationResult(pin, assignments, totalPaid, fullName);
-            currentCart = [];
-            updateAllViews();
+            saveData().then(() => {
+                showRegistrationResult(pin, assignments, totalPaid, fullName);
+                currentCart = [];
+                updateAllViews();
+            });
         });
 
         function showRegistrationResult(pin, assignments, total, fullName) {
@@ -2994,6 +2990,7 @@
 
         function renderClients() {
             const tbody = document.getElementById("clientsTable");
+            if (!tbody) return;
             tbody.innerHTML = "";
 
             let sortedClients = [...appData.clients].sort((a, b) => {
@@ -3033,9 +3030,9 @@
                 <td><span class="badge ${status.class}">${status.text}</span></td>
                 <td>
                     <div class="action-btns">
-                        <button class="btn btn-secondary" onclick="window.editClient('${client.pin}')" style="padding: 6px 10px;">✏️</button>
-                        <button class="btn btn-primary" onclick="window.viewClientDetails('${client.pin}')" style="padding: 6px 10px;">👁️</button>
-                        <button class="btn btn-warning" onclick="window.renewClient('${client.pin}')" style="padding: 6px 10px;">🔄</button>
+                        <button class="btn btn-secondary" onclick="editClient('${client.pin}')" style="padding: 6px 10px;">✏️</button>
+                        <button class="btn btn-primary" onclick="viewClientDetails('${client.pin}')" style="padding: 6px 10px;">👁️</button>
+                        <button class="btn btn-warning" onclick="renewClient('${client.pin}')" style="padding: 6px 10px;">🔄</button>
                     </div>
                 </td>
             `;
@@ -3054,6 +3051,7 @@
             const query = document.getElementById("clientSearch").value.toLowerCase().trim();
             const resultsDiv = document.getElementById("searchResults");
             const listDiv = document.getElementById("searchResultsList");
+            if (!resultsDiv || !listDiv) return;
 
             if (query.length < 2) {
                 resultsDiv.style.display = "none";
@@ -3166,13 +3164,13 @@
                     </div>
                     
                     <div style="display: flex; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(59, 130, 246, 0.2);">
-                        <button class="btn btn-secondary" onclick="window.editClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        <button class="btn btn-secondary" onclick="editClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
                             ✏️ Editar
                         </button>
-                        <button class="btn btn-warning" onclick="window.renewClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        <button class="btn btn-warning" onclick="renewClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
                             🔄 Renovar
                         </button>
-                        <button class="btn btn-danger" onclick="window.deleteClientFromSearch('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        <button class="btn btn-danger" onclick="deleteClientFromSearch('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
                             🗑️ Eliminar
                         </button>
                     </div>
@@ -3185,7 +3183,7 @@
             resultsDiv.style.display = "block";
         }
 
-        async function deleteClientFromSearch(pin) {
+        function deleteClientFromSearch(pin) {
             const client = appData.clients.find((c) => c.pin === pin);
             if (!client) return;
 
@@ -3204,12 +3202,11 @@
             });
 
             appData.clients = appData.clients.filter((c) => c.pin !== pin);
-            await saveData(); // 🔥 Guardar en Firebase
-
-            updateAllViews();
-            searchClients();
-
-            showNotification(`✅ Cliente ${client.name} eliminado correctamente`, "success");
+            saveData().then(() => {
+                updateAllViews();
+                searchClients();
+                showNotification(`✅ Cliente ${client.name} eliminado correctamente`, "success");
+            });
         }
 
         function editClient(pin) {
@@ -3266,10 +3263,10 @@
                     </div>
                 </div>
                 <div style="display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <button onclick="window.renewEditAssignment(${idx})" class="btn btn-warning" style="flex: 1; padding: 6px; font-size: 11px;">
+                    <button onclick="renewEditAssignment(${idx})" class="btn btn-warning" style="flex: 1; padding: 6px; font-size: 11px;">
                         🔄 Renovar
                     </button>
-                    <button onclick="window.removeEditAssignment(${idx})" class="btn btn-danger" style="flex: 1; padding: 6px; font-size: 11px;">
+                    <button onclick="removeEditAssignment(${idx})" class="btn btn-danger" style="flex: 1; padding: 6px; font-size: 11px;">
                         ❌ Quitar
                     </button>
                 </div>
@@ -3278,7 +3275,7 @@
             });
         }
 
-        async function removeEditAssignment(assignmentIndex) {
+        function removeEditAssignment(assignmentIndex) {
             const client = appData.clients.find((c) => c.pin === editingClientPin);
             if (!client) return;
 
@@ -3309,12 +3306,11 @@
                 client.totalPaid = 0;
             }
 
-            await saveData(); // 🔥 Guardar en Firebase
-
-            renderEditCurrentAssignments(client);
-            updateAllViews();
-
-            showNotification(`✅ ${assignment.platform} removido correctamente`, "success");
+            saveData().then(() => {
+                renderEditCurrentAssignments(client);
+                updateAllViews();
+                showNotification(`✅ ${assignment.platform} removido correctamente`, "success");
+            });
         }
 
         function updateEditPlatformSelection() {
@@ -3363,17 +3359,17 @@
                 <div style="display: flex; gap: 15px; align-items: center;">
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
-                        <select class="edit-duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="window.updateEditPriceSummary();">
+                        <select class="edit-duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updateEditPriceSummary();">
                             <option value="1">1 Mes</option>
                             <option value="3">3 Meses (-12%)</option>
                         </select>
                     </div>
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: var(--text-secondary);">Cantidad</label>
-                        <input type="number" class="edit-quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="window.updateEditPriceSummary()">
+                        <input type="number" class="edit-quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="updateEditPriceSummary()">
                     </div>
                     <div style="display: flex; align-items: end; height: 100%;">
-                        <button type="button" class="btn btn-primary" onclick="window.addToEditCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
+                        <button type="button" class="btn btn-primary" onclick="addToEditCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
                     </div>
                 </div>
             `;
@@ -3381,7 +3377,8 @@
             });
         }
 
-        function addToEditCart(platform, deviceType, ...accountIds) {
+        function addToEditCart(platform, deviceType) {
+            const accountIds = Array.prototype.slice.call(arguments, 2);
             const accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
             const available = accounts.reduce(
                 (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
@@ -3438,6 +3435,7 @@
         function updateEditPriceSummary() {
             const summary = document.getElementById("editPriceSummary");
             const content = document.getElementById("editSummaryContent");
+            if (!summary || !content) return;
 
             if (editCurrentCart.length === 0) {
                 summary.style.display = "none";
@@ -3546,7 +3544,7 @@
             content.innerHTML = html;
         }
 
-        async function renewEditAssignment(assignmentIndex) {
+        function renewEditAssignment(assignmentIndex) {
             const client = appData.clients.find((c) => c.pin === editingClientPin);
             if (!client) return;
 
@@ -3573,13 +3571,14 @@
                 if (profile) profile.expiryDate = newEnd.toISOString();
             }
 
-            await saveData(); // 🔥 Guardar en Firebase
-            renderEditCurrentAssignments(client);
-            updateAllViews();
-            alert(`✅ Renovado por ${monthsNum} mes(es)\nNueva fecha: ${formatDate(newEnd)}`);
+            saveData().then(() => {
+                renderEditCurrentAssignments(client);
+                updateAllViews();
+                alert(`✅ Renovado por ${monthsNum} mes(es)\nNueva fecha: ${formatDate(newEnd)}`);
+            });
         }
 
-        document.getElementById("editClientForm").addEventListener("submit", async (e) => {
+        document.getElementById("editClientForm").addEventListener("submit", function (e) {
             e.preventDefault();
 
             const oldPin = document.getElementById("editClientOldPin").value;
@@ -3672,15 +3671,15 @@
                 }
             }
 
-            await saveData(); // 🔥 Guardar en Firebase
-
-            if (editCurrentCart.length > 0) {
-                showEditRegistrationResult(client.pin, newAssignments, totalAdditional, client.name);
-            } else {
-                closeModal("editClientModal");
-                updateAllViews();
-                alert("✅ Datos del cliente actualizados correctamente");
-            }
+            saveData().then(() => {
+                if (editCurrentCart.length > 0) {
+                    showEditRegistrationResult(client.pin, newAssignments, totalAdditional, client.name);
+                } else {
+                    closeModal("editClientModal");
+                    updateAllViews();
+                    alert("✅ Datos del cliente actualizados correctamente");
+                }
+            });
         });
 
         function showEditRegistrationResult(pin, assignments, total, fullName) {
@@ -3727,7 +3726,7 @@
             });
         }
 
-        async function deleteCurrentClient() {
+        function deleteCurrentClient() {
             if (!editingClientPin) {
                 alert("⚠️ Error: No se ha seleccionado ningún cliente");
                 return;
@@ -3748,11 +3747,11 @@
             });
 
             appData.clients = appData.clients.filter((c) => c.pin !== editingClientPin);
-            await saveData(); // 🔥 Guardar en Firebase
-
-            closeModal("editClientModal");
-            updateAllViews();
-            alert("✅ Cliente eliminado y perfiles liberados correctamente");
+            saveData().then(() => {
+                closeModal("editClientModal");
+                updateAllViews();
+                alert("✅ Cliente eliminado y perfiles liberados correctamente");
+            });
         }
 
         function viewClientDetails(pin) {
@@ -3850,7 +3849,7 @@
             if (input) input.value = months;
 
             document.querySelectorAll(".renewal-option").forEach((opt) => opt.classList.remove("selected"));
-            document.getElementById(`renewOption${months}`).classList.add("selected");
+            document.getElementById("renewOption" + months).classList.add("selected");
 
             calculateAndShowRenewalCost();
         }
@@ -3953,7 +3952,7 @@
         `;
         }
 
-        async function confirmRenewal() {
+        function confirmRenewal() {
             const months = selectedRenewalMonths;
 
             if (!months || isNaN(months) || months < 1 || months > 3) {
@@ -4032,18 +4031,17 @@
                 }
             });
 
-            await saveData(); // 🔥 Guardar en Firebase
-
-            closeModal('renewClientModal');
-            updateAllViews();
-
-            showNotification(
-                `✅ Suscripción renovada\n💰 Cobrado: $${renewalCost.toFixed(2)}\n📅 Nueva fecha: ${formatDate(newEnd)}`,
-                "success"
-            );
+            saveData().then(() => {
+                closeModal('renewClientModal');
+                updateAllViews();
+                showNotification(
+                    `✅ Suscripción renovada\n💰 Cobrado: $${renewalCost.toFixed(2)}\n📅 Nueva fecha: ${formatDate(newEnd)}`,
+                    "success"
+                );
+            });
         }
 
-        function showNotification(message, type = "success") {
+        function showNotification(message, type) {
             const notification = document.createElement("div");
             notification.style.cssText = `
             position: fixed;
@@ -4088,34 +4086,44 @@
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
 
-            document.getElementById("currentMonthBanner").textContent = `💰 Flujo de Caja de ${MONTH_NAMES[currentMonth]} ${currentYear}`;
+            const banner = document.getElementById("currentMonthBanner");
+            if (banner) banner.textContent = `💰 Flujo de Caja de ${MONTH_NAMES[currentMonth]} ${currentYear}`;
 
             const monthlyIncome = calculateMonthlyIncome(currentMonth, currentYear);
             const monthlyCosts = calculateMonthlyCosts();
             const netCash = monthlyIncome - monthlyCosts;
 
-            document.getElementById("cashInHand").textContent = "$" + monthlyIncome.toFixed(2);
-            document.getElementById("monthlyCosts").textContent = "$" + monthlyCosts.toFixed(2);
-            document.getElementById("netCashFlow").textContent = (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
+            const cashInHand = document.getElementById("cashInHand");
+            const monthlyCostsEl = document.getElementById("monthlyCosts");
+            const netCashFlow = document.getElementById("netCashFlow");
+
+            if (cashInHand) cashInHand.textContent = "$" + monthlyIncome.toFixed(2);
+            if (monthlyCostsEl) monthlyCostsEl.textContent = "$" + monthlyCosts.toFixed(2);
+            if (netCashFlow) netCashFlow.textContent = (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
 
             const netCard = document.getElementById("netCashCard");
             const netText = document.getElementById("netCashText");
 
-            if (netCash >= 0) {
-                netCard.className = "stat-card success";
-                netText.textContent = "✅ Tienes ganancia este mes";
-            } else {
-                netCard.className = "stat-card danger";
-                netText.textContent = "⚠️ Estás en números rojos";
+            if (netCard && netText) {
+                if (netCash >= 0) {
+                    netCard.className = "stat-card success";
+                    netText.textContent = "✅ Tienes ganancia este mes";
+                } else {
+                    netCard.className = "stat-card danger";
+                    netText.textContent = "⚠️ Estás en números rojos";
+                }
             }
 
             const activeClients = appData.clients.filter((c) => {
                 const days = Math.max(0, ...c.assignments.map((a) => getDaysRemaining(a.expiryDate)));
                 return days > 0;
             });
-            document.getElementById("totalClients").textContent = activeClients.length;
+            const totalClientsEl = document.getElementById("totalClients");
+            if (totalClientsEl) totalClientsEl.textContent = activeClients.length;
 
             const alertsContainer = document.getElementById("alertsContainer");
+            if (!alertsContainer) return;
+
             const expiringSoon = appData.clients.filter((c) => {
                 const days = Math.max(0, ...c.assignments.map((a) => getDaysRemaining(a.expiryDate)));
                 return days > 3 && days <= 10;
@@ -4153,6 +4161,7 @@
             }
 
             const dashboardAccounts = document.getElementById("dashboardAccounts");
+            if (!dashboardAccounts) return;
             dashboardAccounts.innerHTML = "";
 
             const summary = {};
@@ -4186,24 +4195,29 @@
         }
 
         function updateFinanceView() {
-            document.getElementById("financeMonthBanner").textContent = `💰 Flujo de Caja de ${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+            const banner = document.getElementById("financeMonthBanner");
+            if (banner) banner.textContent = `💰 Flujo de Caja de ${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
 
             const monthlyIncome = calculateMonthlyIncome(selectedMonth, selectedYear);
             const monthlyCosts = calculateMonthlyCosts();
             const netCash = monthlyIncome - monthlyCosts;
 
-            document.getElementById("selectedMonthIncome").textContent = "$" + monthlyIncome.toFixed(2);
-            document.getElementById("selectedMonthCosts").textContent = "$" + monthlyCosts.toFixed(2);
-            document.getElementById("selectedMonthNet").textContent = (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
+            const selectedMonthIncome = document.getElementById("selectedMonthIncome");
+            const selectedMonthCosts = document.getElementById("selectedMonthCosts");
+            const selectedMonthNet = document.getElementById("selectedMonthNet");
+
+            if (selectedMonthIncome) selectedMonthIncome.textContent = "$" + monthlyIncome.toFixed(2);
+            if (selectedMonthCosts) selectedMonthCosts.textContent = "$" + monthlyCosts.toFixed(2);
+            if (selectedMonthNet) selectedMonthNet.textContent = (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
 
             const netCard = document.getElementById("selectedNetCard");
-            if (netCash >= 0) {
-                netCard.className = "stat-card success";
-            } else {
-                netCard.className = "stat-card danger";
+            if (netCard) {
+                netCard.className = netCash >= 0 ? "stat-card success" : "stat-card danger";
             }
 
             const breakdown = document.getElementById("platformBreakdown");
+            if (!breakdown) return;
+
             let html = "";
 
             const platformIncome = {};
@@ -4211,7 +4225,9 @@
                 if (isPaymentInSelectedMonth(client.paymentDate)) {
                     client.assignments.forEach((ass) => {
                         if (!platformIncome[ass.platform]) platformIncome[ass.platform] = 0;
-                        const acc = appData.accounts.find((a) => a.email === ass.accountEmail && a.platform === ass.platform);
+                        const acc = appData.accounts.find(
+                            (a) => a.email === ass.accountEmail && a.platform === ass.platform,
+                        );
                         if (acc) {
                             const months = ass.durationMonths || 1;
                             const price = acc.pricePerProfile * months * (months === 3 ? 0.88 : 1);
@@ -4270,6 +4286,8 @@
             breakdown.innerHTML = html;
 
             const select = document.getElementById("paymentAccount");
+            if (!select) return;
+
             select.innerHTML = '<option value="">Selecciona una cuenta...</option>';
 
             const netflixByEmail = {};
@@ -4312,6 +4330,8 @@
             }
 
             const list = document.getElementById("paymentList");
+            if (!list) return;
+
             const sorted = appData.payments.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             if (sorted.length === 0) {
@@ -4335,6 +4355,8 @@
             }
 
             const upcoming = document.getElementById("upcomingPayments");
+            if (!upcoming) return;
+
             const nextPayments = appData.accounts
                 .map((a) => ({ ...a, daysLeft: getDaysRemaining(a.nextPayment) }))
                 .sort((a, b) => a.daysLeft - b.daysLeft)
@@ -4363,7 +4385,7 @@
             }
         }
 
-        document.getElementById("paymentForm").addEventListener("submit", async (e) => {
+        document.getElementById("paymentForm").addEventListener("submit", function (e) {
             e.preventDefault();
 
             const select = document.getElementById("paymentAccount");
@@ -4398,12 +4420,12 @@
                 account.nextPayment = payment.nextPayment;
             });
 
-            await saveData(); // 🔥 Guardar en Firebase
-
-            e.target.reset();
-            updateFinanceView();
-            renderAccounts();
-            showNotification(`✅ Pago registrado para ${accountIds.length} cuenta(s)`, "success");
+            saveData().then(() => {
+                e.target.reset();
+                updateFinanceView();
+                renderAccounts();
+                showNotification(`✅ Pago registrado para ${accountIds.length} cuenta(s)`, "success");
+            });
         });
 
         function updateAllViews() {
@@ -4412,39 +4434,6 @@
             renderClients();
             updateFinanceView();
         }
-
-        // Exponer funciones al window para que los onclick en HTML funcionen
-        window.handleLogin = handleLogin;
-        window.logout = logout;
-        window.showSection = showSection;
-        window.openModal = openModal;
-        window.closeModal = closeModal;
-        window.handlePlatformChange = handlePlatformChange;
-        window.validateDeviceType = validateDeviceType;
-        window.editAccount = editAccount;
-        window.deleteCurrentAccount = deleteCurrentAccount;
-        window.quickUpdatePrice = quickUpdatePrice;
-        window.quickUpdateCost = quickUpdateCost;
-        window.updateDatePreview = updateDatePreview;
-        window.updateAllDatePreviews = updateAllDatePreviews;
-        window.updatePlatformSelection = updatePlatformSelection;
-        window.addToCart = addToCart;
-        window.updatePriceSummary = updatePriceSummary;
-        window.resetClientForm = resetClientForm;
-        window.toggleSort = toggleSort;
-        window.searchClients = searchClients;
-        window.deleteClientFromSearch = deleteClientFromSearch;
-        window.editClient = editClient;
-        window.removeEditAssignment = removeEditAssignment;
-        window.updateEditPlatformSelection = updateEditPlatformSelection;
-        window.addToEditCart = addToEditCart;
-        window.updateEditPriceSummary = updateEditPriceSummary;
-        window.renewEditAssignment = renewEditAssignment;
-        window.deleteCurrentClient = deleteCurrentClient;
-        window.viewClientDetails = viewClientDetails;
-        window.renewClient = renewClient;
-        window.selectRenewalMonths = selectRenewalMonths;
-        window.confirmRenewal = confirmRenewal;
 
         window.onclick = function (event) {
             if (event.target.classList.contains("modal")) {
