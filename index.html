@@ -1,0 +1,4618 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FreshRiff Streaming Manager - Sistema de Caja</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1e293b;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #1d4ed8;
+            --accent-danger: #ef4444;
+            --accent-danger-dark: #dc2626;
+            --accent-success: #10b981;
+            --accent-warning: #f59e0b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+        }
+
+        body {
+            font-family:
+                "Segoe UI",
+                system-ui,
+                -apple-system,
+                sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #0f172a 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse-red {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        @keyframes pulse-green {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+        }
+
+        /* LOGIN STYLES */
+        #loginScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #0f172a 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .login-container {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 40px;
+            width: 90%;
+            max-width: 450px;
+            border: 2px solid var(--accent-danger);
+            box-shadow: 0 20px 60px rgba(239, 68, 68, 0.3);
+            text-align: center;
+        }
+
+        .login-logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .login-title {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(45deg, var(--accent-danger), var(--accent-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .login-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .login-form .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .login-form label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-secondary);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-primary);
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--accent-danger);
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(45deg, var(--accent-danger), var(--accent-primary));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 10px;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .login-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--accent-danger);
+            color: var(--accent-danger);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-10px);
+            }
+
+            75% {
+                transform: translateX(10px);
+            }
+        }
+
+        .login-error.show {
+            display: block;
+        }
+
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+
+        /* HIDE MAIN CONTENT INITIALLY */
+        #mainContent {
+            display: none;
+        }
+
+        #mainContent.authenticated {
+            display: block;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg,
+                    var(--bg-secondary) 0%,
+                    var(--bg-card) 100%);
+            border-bottom: 3px solid var(--accent-danger);
+            padding: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .logo {
+            font-size: 26px;
+            font-weight: 800;
+            background: linear-gradient(45deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 2px solid var(--accent-danger);
+            color: var(--accent-danger);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: var(--accent-danger);
+            color: white;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            padding: 10px 18px;
+            background: transparent;
+            border: 2px solid var(--accent-primary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 25px;
+            transition: all 0.3s;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .nav-tab:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent-primary);
+            transform: translateY(-2px);
+            border-color: var(--accent-danger);
+        }
+
+        .nav-tab.active {
+            background: linear-gradient(45deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--accent-danger);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.1);
+        }
+
+        .stat-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+        }
+
+        .stat-card.success::before {
+            background: var(--accent-success);
+        }
+
+        .stat-card.warning::before {
+            background: var(--warning);
+        }
+
+        .stat-card.danger::before {
+            background: var(--accent-danger);
+        }
+
+        .stat-card.info::before {
+            background: var(--accent-primary);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            margin: 8px 0;
+            letter-spacing: -1px;
+        }
+
+        .stat-card.success .stat-value {
+            color: var(--accent-success);
+        }
+
+        .stat-card.warning .stat-value {
+            color: var(--warning);
+        }
+
+        .stat-card.danger .stat-value {
+            color: var(--accent-danger);
+        }
+
+        .stat-card.info .stat-value {
+            color: var(--accent-primary);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 22px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(59, 130, 246, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-primary);
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-danger);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg,
+                    var(--accent-primary),
+                    var(--accent-secondary));
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg,
+                    var(--accent-danger),
+                    var(--accent-danger-dark));
+            color: white;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            border: 2px solid var(--accent-primary);
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, var(--success), #059669);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, var(--warning), #d97706);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .btn-large {
+            padding: 15px 30px;
+            font-size: 16px;
+        }
+
+        .accounts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .platform-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            border: 2px solid rgba(59, 130, 246, 0.2);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .platform-card:hover {
+            border-color: var(--accent-danger);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.1);
+        }
+
+        .platform-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .platform-name {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .platform-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .netflix {
+            background: linear-gradient(135deg, #e50914, #b20710);
+        }
+
+        .disney {
+            background: linear-gradient(135deg, #113ccf, #0d2aa8);
+        }
+
+        .prime {
+            background: linear-gradient(135deg, #00a8e1, #0077a8);
+        }
+
+        .hbo {
+            background: linear-gradient(135deg, #9900ff, #7700cc);
+        }
+
+        .youtube {
+            background: linear-gradient(135deg, #ff0000, #cc0000);
+        }
+
+        .profile-slots {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .profile-slot {
+            aspect-ratio: 1;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .slot-available {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .slot-occupied {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: var(--accent-danger);
+            color: var(--accent-danger);
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 20px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 14px;
+            text-align: left;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+        }
+
+        .data-table th {
+            background: linear-gradient(135deg,
+                    var(--bg-secondary),
+                    var(--bg-card));
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--accent-primary);
+        }
+
+        .data-table tr:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 1px solid var(--warning);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-danger);
+            border: 1px solid var(--accent-danger);
+            animation: pulse-red 2s infinite;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 2px solid var(--accent-danger);
+            box-shadow: 0 20px 60px rgba(239, 68, 68, 0.2);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+            padding-bottom: 15px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 28px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .close-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+            transform: rotate(90deg);
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            padding-left: 45px;
+            font-size: 16px;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .search-box input:focus {
+            border-color: var(--accent-danger);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent-danger);
+            font-size: 18px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+        }
+
+        .pin-display {
+            font-size: 36px;
+            font-weight: 800;
+            text-align: center;
+            padding: 24px;
+            background: linear-gradient(135deg,
+                    rgba(239, 68, 68, 0.1),
+                    rgba(59, 130, 246, 0.1));
+            border-radius: 12px;
+            border: 3px dashed var(--accent-danger);
+            margin: 20px 0;
+            letter-spacing: 12px;
+            font-family: "Courier New", monospace;
+            color: var(--accent-danger);
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .info-box {
+            background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.1),
+                    rgba(239, 68, 68, 0.05));
+            border-left: 4px solid var(--accent-primary);
+            padding: 16px;
+            border-radius: 0 12px 12px 0;
+            margin: 15px 0;
+            font-size: 14px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-left-width: 4px;
+        }
+
+        .client-result {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            animation: fadeIn 0.3s ease-out;
+            transition: all 0.3s;
+        }
+
+        .client-result:hover {
+            border-color: var(--accent-danger);
+            transform: translateX(5px);
+        }
+
+        .price-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.2),
+                    rgba(59, 130, 246, 0.1));
+            border-radius: 20px;
+            font-weight: 700;
+            color: var(--accent-primary);
+            margin: 5px;
+            border: 1px solid var(--accent-primary);
+        }
+
+        .discount-badge {
+            background: var(--accent-danger);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 800;
+            margin-left: 8px;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-btns .btn {
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .sort-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--accent-primary);
+            font-size: 14px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            padding: 10px 20px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 25px;
+            border: 2px solid var(--accent-primary);
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .sort-indicator:hover {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .platform-subtype {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: rgba(59, 130, 246, 0.1);
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-left: 10px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg,
+                    rgba(59, 130, 246, 0.15),
+                    rgba(239, 68, 68, 0.05));
+            border: 2px solid var(--accent-primary);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 20px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .summary-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+            font-size: 15px;
+        }
+
+        .summary-row:last-child {
+            border-bottom: none;
+            font-weight: 800;
+            font-size: 20px;
+            color: var(--accent-primary);
+            margin-top: 10px;
+            padding-top: 15px;
+            border-top: 2px solid var(--accent-primary);
+        }
+
+        .price-section {
+            background: linear-gradient(135deg,
+                    rgba(239, 68, 68, 0.05),
+                    rgba(59, 130, 246, 0.05));
+            border: 2px solid rgba(239, 68, 68, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .price-section-title {
+            color: var(--accent-danger);
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+        }
+
+        .finance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .finance-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 20px;
+            border: 2px solid rgba(59, 130, 246, 0.2);
+            transition: all 0.3s;
+        }
+
+        .finance-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--accent-danger);
+        }
+
+        .finance-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .finance-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 14px;
+        }
+
+        .finance-row.total {
+            border-top: 2px solid var(--accent-primary);
+            border-bottom: none;
+            margin-top: 10px;
+            padding-top: 10px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .date-preview {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .date-preview strong {
+            color: var(--accent-primary);
+        }
+
+        .cash-positive {
+            background: linear-gradient(135deg,
+                    rgba(16, 185, 129, 0.2),
+                    rgba(16, 185, 129, 0.05));
+            border: 2px solid var(--success);
+            animation: pulse-green 2s infinite;
+        }
+
+        .cash-negative {
+            background: linear-gradient(135deg,
+                    rgba(239, 68, 68, 0.2),
+                    rgba(239, 68, 68, 0.05));
+            border: 2px solid var(--accent-danger);
+            animation: pulse-red 2s infinite;
+        }
+
+        .current-month-banner {
+            background: linear-gradient(135deg,
+                    var(--accent-primary),
+                    var(--accent-secondary));
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 18px;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        @media (max-width: 768px) {
+
+            .grid-2,
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .accounts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .finance-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-tabs {
+                justify-content: center;
+            }
+
+            .login-container {
+                padding: 30px 20px;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+            border-radius: 5px;
+        }
+
+        .date-display {
+            font-family: "Courier New", monospace;
+            color: var(--accent-primary);
+            font-weight: 600;
+        }
+
+        .highlight-danger {
+            color: var(--accent-danger);
+            font-weight: 700;
+        }
+
+        .highlight-primary {
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+
+        .highlight-success {
+            color: var(--accent-success);
+            font-weight: 700;
+        }
+
+        .field-label-required::after {
+            content: " *";
+            color: var(--accent-danger);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .cash-flow-box {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cash-flow-positive {
+            border-color: var(--success);
+        }
+
+        .cash-flow-negative {
+            border-color: var(--accent-danger);
+        }
+
+        .month-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .month-btn {
+            padding: 10px 20px;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .month-btn:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        .month-btn.active {
+            background: linear-gradient(45deg,
+                    var(--accent-danger),
+                    var(--accent-primary));
+            color: white;
+            border-color: transparent;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .detail-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 14px;
+            text-align: right;
+        }
+
+        .platform-detail-card {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 2px solid rgba(59, 130, 246, 0.2);
+            transition: all 0.3s;
+        }
+
+        .platform-detail-card:hover {
+            border-color: var(--accent-primary);
+            transform: translateX(5px);
+        }
+
+        .renewal-option {
+            background: var(--bg-secondary);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .renewal-option:hover {
+            border-color: var(--accent-primary);
+            background: rgba(59, 130, 246, 0.1);
+            transform: translateY(-3px);
+        }
+
+        .renewal-option.selected {
+            border-color: var(--accent-success);
+            background: rgba(16, 185, 129, 0.15);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+        }
+
+        .renewal-months {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent-primary);
+            margin-bottom: 5px;
+        }
+
+        .renewal-price {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .renewal-discount {
+            background: var(--accent-danger);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-top: 8px;
+            display: inline-block;
+        }
+
+        .client-header-info {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .client-name-large {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .client-pin-large {
+            font-family: "Courier New", monospace;
+            font-size: 32px;
+            color: var(--accent-danger);
+            font-weight: 800;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg,
+                    rgba(239, 68, 68, 0.1),
+                    rgba(59, 130, 246, 0.05));
+            padding: 10px 20px;
+            border-radius: 12px;
+            display: inline-block;
+            border: 2px dashed var(--accent-danger);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen">
+        <div class="login-container">
+            <div class="login-logo">🎬</div>
+            <h1 class="login-title">FreshRiff Manager</h1>
+            <p class="login-subtitle">Sistema de Gestión de Streaming</p>
+
+            <div id="loginError" class="login-error">
+                ⚠️ Correo o contraseña incorrectos
+            </div>
+
+            <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="loginEmail">📧 Correo Electrónico</label>
+                    <input type="email" id="loginEmail" required placeholder="tu@email.com" autocomplete="email" />
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">🔑 Contraseña</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••"
+                        autocomplete="current-password" />
+                </div>
+
+                <button type="submit" class="login-btn">
+                    🔓 Ingresar al Sistema
+                </button>
+            </form>
+
+            <div class="security-badge">
+                🔒 Acceso Restringido • Solo Administradores
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT (Hidden until login) -->
+    <div id="mainContent">
+        <header>
+            <div class="header-content">
+                <div class="logo">🎬 FreshRiff Streaming Manager</div>
+                <div class="user-info">
+                    <span id="userEmailDisplay" style="color: var(--text-secondary); font-size: 14px;"></span>
+                    <button class="logout-btn" onclick="logout()">Cerrar Sesión</button>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" onclick="showSection('dashboard')">
+                        📊 Dashboard
+                    </button>
+                    <button class="nav-tab" onclick="showSection('accounts')">
+                        📺 Cuentas
+                    </button>
+                    <button class="nav-tab" onclick="showSection('clients')">
+                        👥 Clientes
+                    </button>
+                    <button class="nav-tab" onclick="showSection('payments')">
+                        💰 Mi Caja
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <div class="container">
+            <!-- DASHBOARD -->
+            <section id="dashboard" class="section active">
+                <div class="current-month-banner" id="currentMonthBanner">
+                    💰 Calculando flujo de caja...
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card success">
+                        <div class="stat-label">💵 DINERO EN CAJA (Mes Actual)</div>
+                        <div class="stat-value" id="cashInHand">$0.00</div>
+                        <small style="color: var(--text-secondary)">Solo pagos de clientes de este mes</small>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-label">💸 COSTOS MENSUALES (Debes pagar)</div>
+                        <div class="stat-value" id="monthlyCosts">$0.00</div>
+                        <small style="color: var(--text-secondary)">Lo que debes pagar por plataformas</small>
+                    </div>
+                    <div class="stat-card info" id="netCashCard">
+                        <div class="stat-label">📊 TU GANANCIA NETA (Para Gastar)</div>
+                        <div class="stat-value" id="netCashFlow">$0.00</div>
+                        <small style="color: var(--text-secondary)" id="netCashText">Diferencia entre ingresos y
+                            costos</small>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">👥 Clientes Activos</div>
+                        <div class="stat-value" id="totalClients">0</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="section-title">🚨 Alertas de Vencimiento</h2>
+                    <div id="alertsContainer">
+                        <p style="
+                    color: var(--text-secondary);
+                    text-align: center;
+                    padding: 40px;
+                  ">
+                            No hay alertas pendientes
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="section-title">📋 Disponibilidad de Perfiles</h2>
+                    <div class="accounts-grid" id="dashboardAccounts"></div>
+                </div>
+            </section>
+
+            <!-- CUENTAS -->
+            <section id="accounts" class="section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="section-title">📺 Gestión de Cuentas</h2>
+                        <button class="btn btn-primary" onclick="openModal('accountModal')">
+                            + Nueva Cuenta
+                        </button>
+                    </div>
+
+                    <div class="price-section">
+                        <div class="price-section-title">💲 Editor Rápido de Precios</div>
+                        <div id="quickPriceEditor" style="
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                    gap: 15px;
+                  "></div>
+                    </div>
+
+                    <div class="accounts-grid" id="accountsGrid" style="margin-top: 30px"></div>
+                </div>
+            </section>
+
+            <!-- CLIENTES -->
+            <section id="clients" class="section">
+                <div style="margin-bottom: 20px">
+                    <button class="btn btn-success btn-large" onclick="openModal('addClientModal')">
+                        ➕ Añadir Nuevo Cliente
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2 class="section-title">👥 Buscar Clientes</h2>
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="clientSearch" placeholder="Buscar por nombre, apellido o PIN..."
+                            onkeyup="searchClients()" />
+                    </div>
+                    <div class="sort-indicator" onclick="toggleSort()">
+                        <span id="sortIcon">📋</span>
+                        <span id="sortText">Ordenar por Apellido (A-Z)</span>
+                    </div>
+                    <div id="searchResults" style="display: none">
+                        <h3 style="margin-bottom: 15px">Resultados de Búsqueda</h3>
+                        <div id="searchResultsList"></div>
+                    </div>
+                    <h3 style="margin: 30px 0 15px 0">Lista Completa de Clientes</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>PIN</th>
+                                <th>Apellido, Nombre</th>
+                                <th>Plataformas</th>
+                                <th>Vencimiento</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTable"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- FINANZAS / MI CAJA -->
+            <section id="payments" class="section">
+                <div class="current-month-banner" id="financeMonthBanner">
+                    💰 Flujo de Caja del Mes
+                </div>
+
+                <div class="card">
+                    <h2 class="section-title">💰 Mi Caja - Flujo de Caja Real</h2>
+
+                    <div class="month-selector" id="monthSelector">
+                        <!-- Se genera dinámicamente -->
+                    </div>
+
+                    <div class="stats-grid" style="margin-top: 20px">
+                        <div class="stat-card success">
+                            <div class="stat-label">💵 INGRESOS DEL MES SELECCIONADO</div>
+                            <div class="stat-value" id="selectedMonthIncome">$0.00</div>
+                            <small style="color: var(--text-secondary)">Solo clientes que pagaron este mes</small>
+                        </div>
+                        <div class="stat-card danger">
+                            <div class="stat-label">💸 COSTOS FIJOS MENSUALES</div>
+                            <div class="stat-value" id="selectedMonthCosts">$0.00</div>
+                            <small style="color: var(--text-secondary)">Lo que debes pagar por plataformas</small>
+                        </div>
+                        <div class="stat-card info" id="selectedNetCard">
+                            <div class="stat-label">🎯 TU GANANCIA (Dinero para Gastar)</div>
+                            <div class="stat-value" id="selectedMonthNet">$0.00</div>
+                            <small style="color: var(--text-secondary)">Esta es tu ganancia real del mes</small>
+                        </div>
+                    </div>
+
+                    <div class="summary-box" style="margin-top: 30px">
+                        <h4 style="margin-bottom: 15px; color: var(--accent-primary)">
+                            📊 Desglose por Plataforma
+                        </h4>
+                        <div id="platformBreakdown"></div>
+                    </div>
+
+                    <div class="info-box" style="margin-top: 20px">
+                        <strong>💡 ¿Cómo se calcula tu ganancia?</strong><br />
+                        1. <strong>Ingresos:</strong> Solo sumamos lo que pagaron los
+                        clientes cuya <strong>fecha de pago</strong> cae en el mes
+                        seleccionado<br />
+                        2. <strong>Costos:</strong> Sumamos todos los costos mensuales de
+                        tus plataformas (Netflix, Disney+, etc.)<br />
+                        3. <strong>Ganancia:</strong> Ingresos - Costos =
+                        <span class="highlight-success">Dinero que puedes gastar</span>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-top: 30px">
+                    <div class="card">
+                        <h2 class="section-title">💳 Registrar Pago de Cuentas</h2>
+                        <form id="paymentForm">
+                            <div class="form-group">
+                                <label>Cuenta a Pagar</label>
+                                <select id="paymentAccount" required></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Monto Pagado</label>
+                                <input type="number" id="paymentAmount" required step="0.01" placeholder="0.00" />
+                            </div>
+                            <div class="form-group">
+                                <label>Fecha de Pago</label>
+                                <input type="date" id="paymentDate" required />
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                Registrar Pago
+                            </button>
+                        </form>
+                        <div id="paymentList" style="margin-top: 20px"></div>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="section-title">📅 Próximos Pagos</h2>
+                        <div id="upcomingPayments"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Modal Nueva Cuenta -->
+        <div id="accountModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-danger)">📺 Registrar Nueva Cuenta</h2>
+                    <button class="close-btn" onclick="closeModal('accountModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="accountForm">
+                    <div class="form-group">
+                        <label class="field-label-required">Plataforma</label>
+                        <select id="accPlatform" required onchange="handlePlatformChange()">
+                            <option value="">Selecciona una plataforma...</option>
+                            <option value="Netflix">Netflix</option>
+                            <option value="Disney+">Disney+</option>
+                            <option value="Prime Video">Prime Video</option>
+                            <option value="HBO Max">HBO Max</option>
+                            <option value="YouTube Premium">YouTube Premium</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="deviceTypeContainer" style="
+                  display: none;
+                  background: rgba(229, 9, 20, 0.05);
+                  padding: 15px;
+                  border-radius: 10px;
+                  border: 2px solid rgba(229, 9, 20, 0.3);
+                ">
+                        <label class="field-label-required" style="color: #e50914">Tipo de Dispositivo Netflix *</label>
+                        <select id="accDeviceType" required onchange="validateDeviceType()">
+                            <option value="">Selecciona el tipo...</option>
+                            <option value="Smart TV">Smart TV (3 perfiles)</option>
+                            <option value="Móvil/PC">Móvil y PC (4 perfiles)</option>
+                        </select>
+                        <small style="
+                    color: var(--text-secondary);
+                    display: block;
+                    margin-top: 5px;
+                  ">
+                            Obligatorio para Netflix. Si tienes ambos tipos con el mismo
+                            email, regístralos por separado.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label-required">Correo Electrónico</label>
+                        <input type="email" id="accEmail" required placeholder="cuenta@email.com" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label-required">Contraseña</label>
+                        <input type="text" id="accPassword" required placeholder="Contraseña" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label-required">Precio de Venta por Perfil</label>
+                        <input type="number" id="accPrice" required step="0.01" placeholder="0.00" />
+                        <small style="color: var(--text-secondary)">Lo que cobras al cliente por cada perfil</small>
+                    </div>
+
+                    <div style="
+                  background: rgba(239, 68, 68, 0.05);
+                  padding: 20px;
+                  border-radius: 10px;
+                  border: 2px solid rgba(239, 68, 68, 0.2);
+                  margin-top: 20px;
+                ">
+                        <h4 style="
+                    color: var(--accent-danger);
+                    margin-bottom: 15px;
+                    font-size: 14px;
+                  ">
+                            💳 Datos de tu Pago (Costo)
+                        </h4>
+                        <div class="form-group" style="margin-bottom: 15px">
+                            <label class="field-label-required">Costo Mensual Total</label>
+                            <input type="number" id="accCost" required step="0.01" placeholder="0.00" />
+                            <small style="color: var(--text-secondary)">Lo que pagas TÚ mensualmente por esta
+                                cuenta</small>
+                        </div>
+                        <div class="form-group" style="margin: 0">
+                            <label class="field-label-required">Fecha del Próximo Pago</label>
+                            <input type="date" id="accNextPayment" required />
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger" style="width: 100%; margin-top: 20px">
+                        Guardar Cuenta
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Editar Cuenta -->
+        <div id="editAccountModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-primary)">✏️ Editar Cuenta</h2>
+                    <button class="close-btn" onclick="closeModal('editAccountModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="editAccountForm">
+                    <input type="hidden" id="editAccId" />
+                    <div class="form-group">
+                        <label>Plataforma</label>
+                        <input type="text" id="editAccPlatform" readonly
+                            style="background: rgba(255, 255, 255, 0.05)" />
+                    </div>
+                    <div class="form-group" id="editDeviceTypeGroup" style="display: none">
+                        <label>Tipo de Dispositivo</label>
+                        <input type="text" id="editAccDeviceType" readonly
+                            style="background: rgba(255, 255, 255, 0.05)" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Correo Electrónico</label>
+                        <input type="email" id="editAccEmail" required placeholder="cuenta@email.com" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Contraseña</label>
+                        <input type="text" id="editAccPassword" required placeholder="Contraseña" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Precio de Venta por Perfil</label>
+                        <input type="number" id="editAccPrice" required step="0.01" placeholder="0.00" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Costo Mensual</label>
+                        <input type="number" id="editAccCost" required step="0.01" placeholder="0.00" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Próximo Pago</label>
+                        <input type="date" id="editAccNextPayment" required />
+                    </div>
+                    <div style="display: flex; gap: 15px; margin-top: 20px">
+                        <button type="submit" class="btn btn-primary" style="flex: 2">
+                            💾 Guardar Cambios
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="deleteCurrentAccount()" style="flex: 1">
+                            🗑️ Eliminar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Añadir Cliente -->
+        <div id="addClientModal" class="modal">
+            <div class="modal-content" style="max-width: 700px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-danger)">➕ Añadir Nuevo Cliente</h2>
+                    <button class="close-btn" onclick="closeModal('addClientModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="clientForm">
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="field-label-required">Nombre</label>
+                            <input type="text" id="clientFirstName" required placeholder="Ej: Pablo" />
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label-required">Apellido</label>
+                            <input type="text" id="clientLastName" required placeholder="Ej: Grúa" />
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>PIN Personalizado (4 dígitos)</label>
+                            <input type="text" id="customPin" maxlength="4" placeholder="Ej: 1234" pattern="\d{4}" />
+                            <small style="color: var(--text-secondary)">Dejar en blanco para generar automático</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label-required">Fecha de Pago del Cliente</label>
+                            <input type="date" id="clientPaymentDate" required onchange="updateAllDatePreviews()" />
+                            <small style="color: var(--text-secondary)">Fecha en que el cliente realizó el pago
+                                (determina
+                                el
+                                vencimiento mensual)</small>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>💡 Descuentos Disponibles:</strong><br />
+                        • <span class="highlight-danger">12% OFF</span> por contratar 3
+                        meses<br />
+                        • <span class="highlight-danger">12% OFF</span> por contratar 3
+                        perfiles de plataformas distintas<br />
+                        <small style="color: var(--text-secondary)">(Solo aplica un descuento, el mayor
+                            beneficio)</small>
+                    </div>
+
+                    <h3 style="margin: 20px 0 15px 0">
+                        Selecciona Plataformas y Duración:
+                    </h3>
+                    <div id="platformSelection"></div>
+
+                    <div class="summary-box" id="priceSummary" style="display: none">
+                        <h4 style="margin-bottom: 15px">💰 Resumen de Contratación</h4>
+                        <div id="summaryContent"></div>
+                    </div>
+
+                    <div style="margin-top: 30px; text-align: center">
+                        <button type="submit" class="btn btn-danger" style="font-size: 16px; padding: 15px 40px">
+                            Registrar Cliente
+                        </button>
+                    </div>
+                </form>
+
+                <div id="registrationResult" style="display: none; margin-top: 30px">
+                    <div class="card" style="
+                  background: linear-gradient(
+                    135deg,
+                    rgba(239, 68, 68, 0.1),
+                    rgba(59, 130, 246, 0.05)
+                  );
+                  border: 3px solid var(--accent-danger);
+                ">
+                        <h3 style="
+                    text-align: center;
+                    margin-bottom: 20px;
+                    color: var(--accent-danger);
+                  ">
+                            ✅ Registro Exitoso
+                        </h3>
+                        <div class="pin-display" id="generatedPin">0000</div>
+                        <div id="assignedProfiles" style="margin-top: 20px"></div>
+                        <button class="btn btn-primary" onclick="resetClientForm()"
+                            style="width: 100%; margin-top: 20px">
+                            Registrar Otro Cliente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Editar Cliente -->
+        <div id="editClientModal" class="modal">
+            <div class="modal-content" style="max-width: 700px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-primary)">✏️ Editar Cliente</h2>
+                    <button class="close-btn" onclick="closeModal('editClientModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="editClientForm">
+                    <input type="hidden" id="editClientOldPin" />
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="field-label-required">Nombre</label>
+                            <input type="text" id="editClientFirstName" required placeholder="Ej: Pablo" />
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label-required">Apellido</label>
+                            <input type="text" id="editClientLastName" required placeholder="Ej: Grúa" />
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="field-label-required">PIN (4 dígitos)</label>
+                            <input type="text" id="editClientPin" maxlength="4" required pattern="\d{4}"
+                                placeholder="1234" />
+                            <small style="color: var(--text-secondary)">Debe ser único de 4 dígitos</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="field-label-required">Fecha de Pago</label>
+                            <input type="date" id="editClientPaymentDate" required
+                                onchange="updateEditDatePreviews()" />
+                            <small style="color: var(--text-secondary)">Fecha en que el cliente realizó el pago</small>
+                        </div>
+                    </div>
+
+                    <h3 style="
+                  margin: 25px 0 15px 0;
+                  padding-top: 20px;
+                  border-top: 2px solid rgba(59, 130, 246, 0.2);
+                ">
+                        📺 Plataformas Contratadas
+                    </h3>
+                    <div id="editCurrentAssignments"></div>
+
+                    <h3 style="
+                  margin: 30px 0 15px 0;
+                  padding-top: 20px;
+                  border-top: 2px solid rgba(59, 130, 246, 0.2);
+                ">
+                        ➕ Agregar Nuevas Plataformas
+                    </h3>
+                    <div id="editPlatformSelection"></div>
+
+                    <div class="summary-box" id="editPriceSummary" style="display: none">
+                        <h4 style="margin-bottom: 15px">💰 Resumen de Agregados</h4>
+                        <div id="editSummaryContent"></div>
+                    </div>
+
+                    <div style="margin-top: 30px; display: flex; gap: 15px">
+                        <button type="submit" class="btn btn-primary" style="flex: 2">
+                            💾 Guardar Cambios
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="deleteCurrentClient()" style="flex: 1">
+                            🗑️ Eliminar
+                        </button>
+                    </div>
+                </form>
+
+                <div id="editRegistrationResult" style="display: none; margin-top: 30px">
+                    <div class="card" style="
+                  background: linear-gradient(
+                    135deg,
+                    rgba(59, 130, 246, 0.1),
+                    rgba(239, 68, 68, 0.05)
+                  );
+                  border: 3px solid var(--accent-primary);
+                ">
+                        <h3 style="
+                    text-align: center;
+                    margin-bottom: 20px;
+                    color: var(--accent-primary);
+                  ">
+                            ✅ Actualización Exitosa
+                        </h3>
+                        <div class="pin-display" id="editGeneratedPin">0000</div>
+                        <div id="editAssignedProfiles" style="margin-top: 20px"></div>
+                        <button class="btn btn-primary" onclick="closeModal('editClientModal')"
+                            style="width: 100%; margin-top: 20px">
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Ver Detalles del Cliente -->
+        <div id="viewClientModal" class="modal">
+            <div class="modal-content" style="max-width: 600px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-primary)">👁️ Detalles del Cliente</h2>
+                    <button class="close-btn" onclick="closeModal('viewClientModal')">
+                        &times;
+                    </button>
+                </div>
+
+                <div class="client-header-info">
+                    <div class="client-name-large" id="viewClientName">
+                        Nombre del Cliente
+                    </div>
+                    <div class="client-pin-large" id="viewClientPin">0000</div>
+                </div>
+
+                <div class="summary-box" style="margin-bottom: 20px">
+                    <div class="detail-row">
+                        <span class="detail-label">💰 Total Pagado</span>
+                        <span class="detail-value" id="viewClientTotalPaid"
+                            style="color: var(--accent-success)">$0.00</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📅 Fecha de Pago</span>
+                        <span class="detail-value" id="viewClientPaymentDate">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📊 Estado</span>
+                        <span class="detail-value" id="viewClientStatus"
+                            style="color: var(--accent-success)">Activo</span>
+                    </div>
+                </div>
+
+                <h3 style="
+                margin-bottom: 15px;
+                color: var(--accent-primary);
+                font-size: 16px;
+              ">
+                    📺 Plataformas Contratadas
+                </h3>
+                <div id="viewClientPlatforms"></div>
+
+                <div style="margin-top: 25px; display: flex; gap: 10px">
+                    <button class="btn btn-primary" onclick="
+                  closeModal('viewClientModal');
+                  editClient(currentViewPin);
+                " style="flex: 1">
+                        ✏️ Editar Cliente
+                    </button>
+                    <button class="btn btn-warning" onclick="
+                  closeModal('viewClientModal');
+                  renewClient(currentViewPin);
+                " style="flex: 1">
+                        🔄 Renovar
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('viewClientModal')" style="flex: 1">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Renovar Suscripción -->
+        <div id="renewClientModal" class="modal">
+            <div class="modal-content" style="max-width: 500px">
+                <div class="modal-header">
+                    <h2 style="color: var(--warning)">🔄 Renovar Suscripción</h2>
+                    <button class="close-btn" onclick="closeModal('renewClientModal')">
+                        &times;
+                    </button>
+                </div>
+
+                <div class="client-header-info">
+                    <div class="client-name-large" id="renewClientName">
+                        Nombre del Cliente
+                    </div>
+                    <div style="
+                  font-family: monospace;
+                  font-size: 20px;
+                  color: var(--accent-danger);
+                  font-weight: 700;
+                  margin-top: 5px;
+                ">
+                        PIN: <span id="renewClientPin">0000</span>
+                    </div>
+                </div>
+
+                <div class="info-box" style="margin-bottom: 20px">
+                    <strong>📅 Vencimiento Actual:</strong>
+                    <span id="renewCurrentExpiry" class="date-display">-</span><br />
+                    <small style="color: var(--text-secondary)">Selecciona cuántos meses deseas agregar a todas las
+                        plataformas
+                        activas</small>
+                </div>
+
+                <h3 style="
+                margin-bottom: 15px;
+                color: var(--accent-primary);
+                font-size: 16px;
+              ">
+                    Selecciona la Duración:
+                </h3>
+
+                <div class="renewal-option" onclick="selectRenewalMonths(1)" id="renewOption1">
+                    <div class="renewal-months">1 Mes</div>
+                    <div class="renewal-price">Sin descuento</div>
+                </div>
+
+                <div class="renewal-option" onclick="selectRenewalMonths(2)" id="renewOption2">
+                    <div class="renewal-months">2 Meses</div>
+                    <div class="renewal-price">Sin descuento</div>
+                </div>
+
+                <div class="renewal-option" onclick="selectRenewalMonths(3)" id="renewOption3">
+                    <div class="renewal-months">3 Meses</div>
+                    <div class="renewal-price">Ahorra 12%</div>
+                    <span class="renewal-discount">MEJOR OPCIÓN</span>
+                </div>
+
+                <input type="hidden" id="selectedRenewalMonths" value="" />
+
+                <div class="summary-box" id="renewalSummary" style="display: none; margin-top: 20px">
+                    <h4 style="margin-bottom: 10px; color: var(--accent-primary)">
+                        📊 Resumen de Renovación
+                    </h4>
+                    <div class="detail-row">
+                        <span class="detail-label">Nueva fecha de vencimiento:</span>
+                        <span class="detail-value" id="renewalNewDate" style="color: var(--accent-success)">-</span>
+                    </div>
+                </div>
+
+                <div style="margin-top: 25px; display: flex; gap: 10px">
+                    <button class="btn btn-warning" onclick="confirmRenewal()" style="flex: 2; font-size: 16px">
+                        ✅ Confirmar Renovación
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('renewClientModal')" style="flex: 1">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CREDENCIALES DE ADMINISTRADOR (CAMBIA ESTO POR SEGURIDAD)
+        const ADMIN_CREDENTIALS = {
+            email: "fretamozo555@gmail.com",
+            password: "@HoraDeAventura23"
+        };
+
+        // Verificar si ya está logueado al cargar
+        document.addEventListener("DOMContentLoaded", () => {
+            const isAuthenticated = sessionStorage.getItem("freshRiffAuth") === "true";
+
+            if (isAuthenticated) {
+                showMainContent();
+            } else {
+                showLoginScreen();
+            }
+
+            loadData();
+            generateMonthSelector();
+        });
+
+        function handleLogin(event) {
+            event.preventDefault();
+
+            const email = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const errorDiv = document.getElementById("loginError");
+
+            if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
+                // Login exitoso
+                sessionStorage.setItem("freshRiffAuth", "true");
+                sessionStorage.setItem("freshRiffUser", email);
+                errorDiv.classList.remove("show");
+                showMainContent();
+                updateAllViews();
+            } else {
+                // Login fallido
+                errorDiv.classList.add("show");
+                document.getElementById("loginPassword").value = "";
+                document.getElementById("loginPassword").focus();
+            }
+        }
+
+        function showLoginScreen() {
+            document.getElementById("loginScreen").style.display = "flex";
+            document.getElementById("mainContent").classList.remove("authenticated");
+            document.getElementById("mainContent").style.display = "none";
+        }
+
+        function showMainContent() {
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("mainContent").style.display = "block";
+            document.getElementById("mainContent").classList.add("authenticated");
+
+            const userEmail = sessionStorage.getItem("freshRiffUser");
+            if (userEmail) {
+                document.getElementById("userEmailDisplay").textContent = userEmail;
+            }
+
+            // Inicializar fechas por defecto
+            document.getElementById("clientPaymentDate").valueAsDate = new Date();
+            document.getElementById("paymentDate").valueAsDate = new Date();
+        }
+
+        function logout() {
+            if (confirm("¿Cerrar sesión?")) {
+                sessionStorage.removeItem("freshRiffAuth");
+                sessionStorage.removeItem("freshRiffUser");
+                location.reload();
+            }
+        }
+
+        const PLATFORM_CONFIG = {
+            Netflix: {
+                icon: "🎬",
+                color: "netflix",
+                hasSubtypes: true,
+                subtypes: {
+                    "Smart TV": { profiles: 3, label: "Smart TV" },
+                    "Móvil/PC": { profiles: 4, label: "Móvil y PC" },
+                },
+            },
+            "Disney+": {
+                icon: "✨",
+                color: "disney",
+                hasSubtypes: false,
+                profiles: 7,
+            },
+            "Prime Video": {
+                icon: "📦",
+                color: "prime",
+                hasSubtypes: false,
+                profiles: 6,
+            },
+            "HBO Max": {
+                icon: "🎭",
+                color: "hbo",
+                hasSubtypes: false,
+                profiles: 5,
+            },
+            "YouTube Premium": {
+                icon: "▶️",
+                color: "youtube",
+                hasSubtypes: false,
+                profiles: 5,
+            },
+        };
+
+        let appData = { accounts: [], clients: [], payments: [] };
+        let currentSort = "asc";
+        let currentCart = [];
+        let editCurrentCart = [];
+        let editingClientPin = null;
+        let selectedMonth = new Date().getMonth();
+        let selectedYear = new Date().getFullYear();
+        let currentViewPin = null;
+        let currentRenewPin = null;
+        let selectedRenewalMonths = 1;
+        let renewalCostPreview = 0;
+
+        const MONTH_NAMES = [
+            "Enero",
+            "Febrero",
+            "Marzo",
+            "Abril",
+            "Mayo",
+            "Junio",
+            "Julio",
+            "Agosto",
+            "Septiembre",
+            "Octubre",
+            "Noviembre",
+            "Diciembre",
+        ];
+
+        function generateMonthSelector() {
+            const container = document.getElementById("monthSelector");
+            container.innerHTML = "";
+
+            const currentDate = new Date();
+            const currentMonth = currentDate.getMonth();
+            const currentYear = currentDate.getFullYear();
+
+            for (let i = -1; i <= 3; i++) {
+                const date = new Date(currentYear, currentMonth + i, 1);
+                const month = date.getMonth();
+                const year = date.getFullYear();
+
+                const btn = document.createElement("button");
+                btn.className = "month-btn";
+                if (month === selectedMonth && year === selectedYear) {
+                    btn.classList.add("active");
+                }
+                btn.textContent = `${MONTH_NAMES[month]} ${year}`;
+                btn.onclick = () => {
+                    selectedMonth = month;
+                    selectedYear = year;
+                    generateMonthSelector();
+                    updateFinanceView();
+                };
+                container.appendChild(btn);
+            }
+        }
+
+        function showSection(sectionId) {
+            document
+                .querySelectorAll(".section")
+                .forEach((s) => s.classList.remove("active"));
+            document
+                .querySelectorAll(".nav-tab")
+                .forEach((t) => t.classList.remove("active"));
+            document.getElementById(sectionId).classList.add("active");
+            event.target.classList.add("active");
+            if (sectionId === "clients") renderClients();
+            if (sectionId === "accounts") renderAccounts();
+            if (sectionId === "payments") updateFinanceView();
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add("active");
+            if (modalId === "accountModal") resetAccountForm();
+            else if (modalId === "addClientModal") {
+                resetClientForm();
+                updatePlatformSelection();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove("active");
+        }
+
+        function resetAccountForm() {
+            document.getElementById("accountForm").reset();
+            document.getElementById("deviceTypeContainer").style.display = "none";
+            document.getElementById("accDeviceType").required = false;
+        }
+
+        function resetClientForm() {
+            document.getElementById("clientForm").style.display = "block";
+            document.getElementById("registrationResult").style.display = "none";
+            document.getElementById("priceSummary").style.display = "none";
+            document.getElementById("clientPaymentDate").valueAsDate = new Date();
+            currentCart = [];
+            updatePlatformSelection();
+        }
+
+        function handlePlatformChange() {
+            const platform = document.getElementById("accPlatform").value;
+            const deviceContainer = document.getElementById("deviceTypeContainer");
+            const deviceSelect = document.getElementById("accDeviceType");
+
+            if (platform === "Netflix") {
+                deviceContainer.style.display = "block";
+                deviceSelect.required = true;
+                deviceContainer.classList.add("required-field");
+            } else {
+                deviceContainer.style.display = "none";
+                deviceSelect.required = false;
+                deviceSelect.value = "";
+                deviceContainer.classList.remove("required-field");
+            }
+        }
+
+        function validateDeviceType() {
+            const deviceType = document.getElementById("accDeviceType").value;
+            const container = document.getElementById("deviceTypeContainer");
+            if (deviceType) {
+                container.classList.remove("required-field");
+                container.style.borderColor = "#e50914";
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return "-";
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString;
+            return date.toLocaleDateString("es-ES", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+            });
+        }
+
+        function calculateExpiryDate(startDate, monthsToAdd) {
+            const date = new Date(startDate);
+            const originalDay = date.getDate();
+            date.setMonth(date.getMonth() + monthsToAdd);
+            if (date.getDate() !== originalDay) date.setDate(0);
+            return date;
+        }
+
+        function getExactDaysBetween(startDate, endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            const diffTime = end - start;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        function generateUniquePIN(customPin = null) {
+            if (customPin && customPin.length === 4 && /^\d{4}$/.test(customPin)) {
+                if (!appData.clients.some((c) => c.pin === customPin))
+                    return customPin;
+                alert(
+                    "El PIN personalizado ya está en uso. Se generará uno automático.",
+                );
+            }
+            let pin;
+            do {
+                pin = Math.floor(1000 + Math.random() * 9000).toString();
+            } while (appData.clients.some((c) => c.pin === pin));
+            return pin;
+        }
+
+        function getDaysRemaining(endDate) {
+            const end = new Date(endDate);
+            const today = new Date();
+            end.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+            const diff = end - today;
+            return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        }
+
+        function getStatusByDays(days) {
+            if (days > 10)
+                return { class: "badge-success", text: "Activo", color: "success" };
+            if (days > 3)
+                return {
+                    class: "badge-warning",
+                    text: "Por vencer",
+                    color: "warning",
+                };
+            return { class: "badge-danger", text: "Crítico", color: "danger" };
+        }
+
+        function saveData() {
+            localStorage.setItem("freshRiffData", JSON.stringify(appData));
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem("freshRiffData");
+            if (saved) appData = JSON.parse(saved);
+        }
+
+        function isPaymentInSelectedMonth(paymentDateStr) {
+            if (!paymentDateStr) return false;
+            const paymentDate = new Date(paymentDateStr);
+            return (
+                paymentDate.getMonth() === selectedMonth &&
+                paymentDate.getFullYear() === selectedYear
+            );
+        }
+
+        function calculateMonthlyIncome(month, year) {
+            let total = 0;
+
+            appData.clients.forEach((client) => {
+                if (isPaymentInSelectedMonth(client.paymentDate)) {
+                    total += client.totalPaid || 0;
+                }
+            });
+
+            return total;
+        }
+
+        function calculateMonthlyCosts() {
+            return appData.accounts.reduce((sum, acc) => sum + (acc.cost || 0), 0);
+        }
+
+        document.getElementById("accountForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const platform = document.getElementById("accPlatform").value;
+            let deviceType = "Todos";
+            let maxProfiles;
+
+            if (platform === "Netflix") {
+                deviceType = document.getElementById("accDeviceType").value;
+                if (!deviceType) {
+                    alert("⚠️ Debes seleccionar el tipo de dispositivo para Netflix");
+                    document
+                        .getElementById("deviceTypeContainer")
+                        .classList.add("required-field");
+                    return;
+                }
+                maxProfiles = PLATFORM_CONFIG[platform].subtypes[deviceType].profiles;
+            } else {
+                maxProfiles = PLATFORM_CONFIG[platform].profiles;
+            }
+
+            const newAccount = {
+                id: Date.now(),
+                platform: platform,
+                deviceType: deviceType,
+                email: document.getElementById("accEmail").value,
+                password: document.getElementById("accPassword").value,
+                maxProfiles: maxProfiles,
+                cost: parseFloat(document.getElementById("accCost").value),
+                pricePerProfile: parseFloat(
+                    document.getElementById("accPrice").value,
+                ),
+                nextPayment: document.getElementById("accNextPayment").value,
+                profiles: Array(maxProfiles)
+                    .fill(null)
+                    .map((_, i) => ({
+                        number: i + 1,
+                        occupied: false,
+                        clientId: null,
+                        expiryDate: null,
+                    })),
+            };
+
+            appData.accounts.push(newAccount);
+            saveData();
+            closeModal("accountModal");
+            updateAllViews();
+            alert("✅ Cuenta registrada exitosamente");
+        });
+
+        function editAccount(id) {
+            const account = appData.accounts.find((a) => a.id === id);
+            if (!account) return;
+
+            document.getElementById("editAccId").value = id;
+            document.getElementById("editAccPlatform").value = account.platform;
+            document.getElementById("editAccEmail").value = account.email;
+            document.getElementById("editAccPassword").value = account.password;
+            document.getElementById("editAccPrice").value = account.pricePerProfile;
+            document.getElementById("editAccCost").value = account.cost;
+            document.getElementById("editAccNextPayment").value =
+                account.nextPayment;
+
+            const deviceGroup = document.getElementById("editDeviceTypeGroup");
+            if (account.platform === "Netflix") {
+                deviceGroup.style.display = "block";
+                document.getElementById("editAccDeviceType").value =
+                    account.deviceType;
+            } else {
+                deviceGroup.style.display = "none";
+            }
+
+            openModal("editAccountModal");
+        }
+
+        document
+            .getElementById("editAccountForm")
+            .addEventListener("submit", (e) => {
+                e.preventDefault();
+                const id = parseInt(document.getElementById("editAccId").value);
+                const account = appData.accounts.find((a) => a.id === id);
+
+                if (account) {
+                    account.email = document.getElementById("editAccEmail").value;
+                    account.password = document.getElementById("editAccPassword").value;
+                    account.pricePerProfile = parseFloat(
+                        document.getElementById("editAccPrice").value,
+                    );
+                    account.cost = parseFloat(
+                        document.getElementById("editAccCost").value,
+                    );
+                    account.nextPayment =
+                        document.getElementById("editAccNextPayment").value;
+
+                    saveData();
+                    closeModal("editAccountModal");
+                    updateAllViews();
+                    alert("✅ Cuenta actualizada exitosamente");
+                }
+            });
+
+        function deleteCurrentAccount() {
+            const id = parseInt(document.getElementById("editAccId").value);
+            const account = appData.accounts.find((a) => a.id === id);
+            if (!account) return;
+
+            const hasClients = account.profiles.some((p) => p.occupied);
+            if (hasClients) {
+                alert(
+                    "⚠️ No puedes eliminar esta cuenta porque tiene clientes activos.",
+                );
+                return;
+            }
+
+            if (confirm("¿Eliminar esta cuenta permanentemente?")) {
+                appData.accounts = appData.accounts.filter((a) => a.id !== id);
+                saveData();
+                closeModal("editAccountModal");
+                updateAllViews();
+                alert("✅ Cuenta eliminada");
+            }
+        }
+
+        function quickUpdatePrice(accountId, newPrice) {
+            const account = appData.accounts.find((a) => a.id === accountId);
+            if (account) {
+                account.pricePerProfile = parseFloat(newPrice);
+                saveData();
+            }
+        }
+
+        function quickUpdateCost(accountId, newCost) {
+            const account = appData.accounts.find((a) => a.id === accountId);
+            if (account) {
+                account.cost = parseFloat(newCost);
+                saveData();
+            }
+        }
+
+        function renderAccounts() {
+            const grid = document.getElementById("accountsGrid");
+            const quickEditor = document.getElementById("quickPriceEditor");
+            grid.innerHTML = "";
+            quickEditor.innerHTML = "";
+
+            appData.accounts.forEach((account) => {
+                const availableProfiles = account.profiles.filter(
+                    (p) => !p.occupied,
+                ).length;
+                const config = PLATFORM_CONFIG[account.platform];
+
+                const priceEditor = document.createElement("div");
+                priceEditor.style.cssText =
+                    "background: var(--bg-secondary); padding: 15px; border-radius: 10px; border: 1px solid rgba(59, 130, 246, 0.2);";
+                priceEditor.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 20px;">${config.icon}</span>
+                            <div>
+                                <div style="font-weight: 700; font-size: 14px;">${account.platform}</div>
+                                ${account.platform === "Netflix" ? `<span class="platform-subtype">${account.deviceType}</span>` : ""}
+                            </div>
+                        </div>
+                        <button onclick="editAccount(${account.id})" style="background: none; border: none; color: var(--accent-primary); cursor: pointer; font-size: 16px;">✏️</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Precio Perfil</label>
+                            <input type="number" value="${account.pricePerProfile.toFixed(2)}" onchange="quickUpdatePrice(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%;" step="0.01">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Tu Costo</label>
+                            <input type="number" value="${account.cost.toFixed(2)}" onchange="quickUpdateCost(${account.id}, this.value)" style="padding: 8px; font-size: 14px; width: 100%; border-color: rgba(239, 68, 68, 0.3);" step="0.01">
+                        </div>
+                    </div>
+                `;
+                quickEditor.appendChild(priceEditor);
+
+                const card = document.createElement("div");
+                card.className = "platform-card";
+                let profilesHtml = '<div class="profile-slots">';
+                account.profiles.forEach((profile, idx) => {
+                    const className = profile.occupied
+                        ? "slot-occupied"
+                        : "slot-available";
+                    const title = profile.occupied
+                        ? `Ocupado por PIN: ${profile.clientId}`
+                        : "Disponible";
+                    profilesHtml += `<div class="profile-slot ${className}" title="${title}">${idx + 1}</div>`;
+                });
+                profilesHtml += "</div>";
+
+                card.innerHTML = `
+                    <div class="platform-header">
+                        <div class="platform-name">
+                            <div class="platform-icon ${config.color}">${config.icon}</div>
+                            <div>
+                                ${account.platform}
+                                ${account.platform === "Netflix" ? `<div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">${account.deviceType}</div>` : ""}
+                            </div>
+                        </div>
+                        <div class="action-btns">
+                            <button class="btn btn-secondary" onclick="editAccount(${account.id})" style="padding: 6px 12px; font-size: 11px;">✏️</button>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 10px; font-size: 13px; color: var(--text-secondary);">
+                        <div style="margin-bottom: 4px;">📧 ${account.email}</div>
+                        <div style="display: flex; gap: 15px;">
+                            <span class="highlight-primary">💰 Venta: $${account.pricePerProfile.toFixed(2)}/perfil</span>
+                        </div>
+                    </div>
+                    ${profilesHtml}
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(59, 130, 246, 0.2); display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                        <div>
+                            <span style="color: var(--text-secondary);">Próximo pago:</span><br>
+                            <span class="date-display">${formatDate(account.nextPayment)}</span>
+                        </div>
+                        <span class="badge ${availableProfiles > 0 ? "badge-success" : "badge-danger"}">${availableProfiles} libres</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function updateDatePreview(container, durationMonths) {
+            const paymentDateInput = document.getElementById("clientPaymentDate");
+            if (!paymentDateInput.value) return;
+
+            const startDate = new Date(paymentDateInput.value);
+            const endDate = calculateExpiryDate(startDate, durationMonths);
+            const days = getExactDaysBetween(startDate, endDate);
+
+            let previewDiv = container.querySelector(".date-preview");
+            if (!previewDiv) {
+                previewDiv = document.createElement("div");
+                previewDiv.className = "date-preview";
+                container.appendChild(previewDiv);
+            }
+
+            previewDiv.innerHTML = `
+                <div>📅 <strong>Inicio:</strong> ${formatDate(startDate)}</div>
+                <div>⏰ <strong>Vencimiento:</strong> ${formatDate(endDate)}</div>
+                <div>📊 <strong>Duración:</strong> ${days} días (${durationMonths} mes${durationMonths > 1 ? "es" : ""})</div>
+            `;
+        }
+
+        function updateAllDatePreviews() {
+            document
+                .querySelectorAll("#platformSelection .card")
+                .forEach((card) => {
+                    const select = card.querySelector(".duration-select");
+                    if (select) updateDatePreview(card, parseInt(select.value));
+                });
+        }
+
+        function updatePlatformSelection() {
+            const container = document.getElementById("platformSelection");
+            container.innerHTML = "";
+
+            const availableAccounts = appData.accounts.filter((acc) =>
+                acc.profiles.some((p) => !p.occupied),
+            );
+            if (availableAccounts.length === 0) {
+                container.innerHTML =
+                    '<p style="color: var(--accent-danger);">⚠️ No hay perfiles disponibles. Primero debes registrar cuentas.</p>';
+                return;
+            }
+
+            const grouped = {};
+            availableAccounts.forEach((acc) => {
+                const key =
+                    acc.platform === "Netflix"
+                        ? `Netflix - ${acc.deviceType}`
+                        : acc.platform;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(acc);
+            });
+
+            Object.entries(grouped).forEach(([key, accounts]) => {
+                const platform = accounts[0].platform;
+                const deviceType = accounts[0].deviceType;
+                const config = PLATFORM_CONFIG[platform];
+                const availableCount = accounts.reduce(
+                    (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                    0,
+                );
+
+                const div = document.createElement("div");
+                div.className = "card";
+                div.style.marginBottom = "15px";
+                div.style.border = "2px solid rgba(59, 130, 246, 0.3)";
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 28px;">${config.icon}</span>
+                            <div>
+                                <div style="font-weight: 700; font-size: 16px;">${platform}</div>
+                                ${platform === "Netflix" ? `<span class="platform-subtype">${deviceType}</span>` : ""}
+                            </div>
+                        </div>
+                        <span class="badge badge-success">${availableCount} disponibles</span>
+                    </div>
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
+                            <select class="duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updatePriceSummary(); updateDatePreview(this.closest('.card'), parseInt(this.value));">
+                                <option value="1">1 Mes</option>
+                                <option value="3">3 Meses (-12%)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">Cantidad</label>
+                            <input type="number" class="quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="updatePriceSummary()">
+                        </div>
+                        <div style="display: flex; align-items: end; height: 100%;">
+                            <button type="button" class="btn btn-primary" onclick="addToCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+                updateDatePreview(div, 1);
+            });
+        }
+
+        function addToCart(platform, deviceType, ...accountIds) {
+            const accounts = appData.accounts.filter((a) =>
+                accountIds.includes(a.id),
+            );
+            const available = accounts.reduce(
+                (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                0,
+            );
+            const container = event.target.closest(".card");
+            const durationMonths = parseInt(
+                container.querySelector(".duration-select").value,
+            );
+            const quantity = parseInt(
+                container.querySelector(".quantity-input").value,
+            );
+
+            if (quantity > available) {
+                alert(`⚠️ Solo hay ${available} perfiles disponibles`);
+                return;
+            }
+
+            const paymentDateInput = document.getElementById("clientPaymentDate");
+            const startDate = paymentDateInput.value
+                ? new Date(paymentDateInput.value)
+                : new Date();
+            const endDate = calculateExpiryDate(startDate, durationMonths);
+            const exactDays = getExactDaysBetween(startDate, endDate);
+
+            const pricePerProfile = accounts[0].pricePerProfile;
+            let subtotal = pricePerProfile * quantity;
+            let discount = 0;
+            let discountType = "";
+
+            if (durationMonths === 3) {
+                subtotal = subtotal * 3;
+                discount = subtotal * 0.12;
+                discountType = "3 meses";
+            }
+
+            const item = {
+                platform,
+                deviceType,
+                durationMonths,
+                durationDays: exactDays,
+                quantity,
+                pricePerProfile,
+                subtotal,
+                discount,
+                discountType,
+                total: subtotal - discount,
+                accountIds,
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+            };
+
+            currentCart.push(item);
+            updatePriceSummary();
+            event.target.textContent = "✓ Agregado";
+            event.target.disabled = true;
+            event.target.style.background = "var(--success)";
+        }
+
+        function updatePriceSummary() {
+            const summary = document.getElementById("priceSummary");
+            const content = document.getElementById("summaryContent");
+
+            if (currentCart.length === 0) {
+                summary.style.display = "none";
+                return;
+            }
+
+            summary.style.display = "block";
+            let html = "";
+
+            let subtotalSinDescuento = 0;
+            currentCart.forEach((item) => {
+                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
+                subtotalSinDescuento += itemSubtotalOriginal;
+            });
+
+            let hasThreeMonths = currentCart.some((i) => i.durationMonths === 3);
+            let distinctPlatforms = new Set(currentCart.map((i) => i.platform)).size;
+            let totalProfiles = currentCart.reduce((sum, i) => sum + i.quantity, 0);
+            let hasThreeProfiles = totalProfiles >= 3;
+
+            let profileDiscountApplicable = distinctPlatforms >= 3 && hasThreeProfiles && !hasThreeMonths;
+
+            let hasThreeMonthsDiscount = hasThreeMonths && !profileDiscountApplicable;
+
+            let descuentoGlobal = 0;
+            let discountType = "";
+            let discountExplanation = "";
+
+            if (profileDiscountApplicable) {
+                descuentoGlobal = subtotalSinDescuento * 0.12;
+                discountType = "3 plataformas";
+                discountExplanation = `${distinctPlatforms} plataformas diferentes, ${totalProfiles} perfiles totales (-12%)`;
+            } else if (hasThreeMonthsDiscount) {
+                currentCart.forEach((item) => {
+                    if (item.durationMonths === 3) {
+                        const itemSubtotalOriginal = item.pricePerProfile * item.quantity * 3;
+                        descuentoGlobal += itemSubtotalOriginal * 0.12;
+                    }
+                });
+                discountType = "3 meses";
+                discountExplanation = `Contratación de 3 meses en una o más plataformas (-12%)`;
+            }
+
+            let grandTotal = subtotalSinDescuento - descuentoGlobal;
+
+            currentCart.forEach((item, idx) => {
+                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
+                let itemDisplayTotal = itemSubtotalOriginal;
+                let itemDisplayDiscount = 0;
+
+                if (profileDiscountApplicable) {
+                    const proporcion = itemSubtotalOriginal / subtotalSinDescuento;
+                    itemDisplayDiscount = descuentoGlobal * proporcion;
+                    itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
+
+                    item.discount = itemDisplayDiscount;
+                    item.total = itemDisplayTotal;
+                    item.discountType = "3 plataformas";
+                } else if (item.durationMonths === 3 && hasThreeMonthsDiscount) {
+                    itemDisplayDiscount = itemSubtotalOriginal * 0.12;
+                    itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
+
+                    item.discount = itemDisplayDiscount;
+                    item.total = itemDisplayTotal;
+                    item.discountType = "3 meses";
+                } else {
+                    item.discount = 0;
+                    item.total = itemSubtotalOriginal;
+                    item.discountType = "";
+                }
+
+                html += `
+            <div class="summary-row">
+                <div>
+                    ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
+                    ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
+                    <br><small style="color: var(--text-secondary);">
+                        ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
+                    </small>
+                    <br><small style="color: var(--accent-primary);">
+                        📅 ${formatDate(item.startDate)} → ${formatDate(item.endDate)} (${item.durationDays} días)
+                    </small>
+                    ${itemDisplayDiscount > 0 ? `<span class="discount-badge">AHORRO: $${itemDisplayDiscount.toFixed(2)}</span>` : ""}
+                </div>
+                <div style="font-weight: 700; color: ${itemDisplayDiscount > 0 ? "var(--success)" : "var(--text-primary)"};">
+                    $${itemDisplayTotal.toFixed(2)}
+                </div>
+            </div>
+        `;
+            });
+
+            if (descuentoGlobal > 0) {
+                html += `
+            <div class="summary-row" style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                <div>
+                    <strong style="color: var(--success);">🎉 Descuento por ${discountType}</strong>
+                    <br><small style="color: var(--text-secondary);">${discountExplanation}</small>
+                </div>
+                <div style="font-weight: 700; color: var(--success); font-size: 18px;">
+                    -$${descuentoGlobal.toFixed(2)}
+                </div>
+            </div>
+        `;
+            }
+
+            html += `
+        <div class="summary-row" style="margin-top: 10px;">
+            <span>TOTAL A PAGAR</span>
+            <span style="color: var(--accent-danger); font-size: 24px;">$${grandTotal.toFixed(2)}</span>
+        </div>
+    `;
+            content.innerHTML = html;
+        }
+
+        document.getElementById("clientForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            if (currentCart.length === 0) {
+                alert("⚠️ Agrega al menos una plataforma al carrito");
+                return;
+            }
+
+            const firstName = document
+                .getElementById("clientFirstName")
+                .value.trim();
+            const lastName = document.getElementById("clientLastName").value.trim();
+            const fullName = `${firstName} ${lastName}`;
+            const customPin = document.getElementById("customPin").value;
+            const pin = generateUniquePIN(customPin || null);
+            const paymentDate = document.getElementById("clientPaymentDate").value;
+            const startDate = paymentDate ? new Date(paymentDate) : new Date();
+
+            const assignments = [];
+            let totalPaid = 0;
+
+            for (const item of currentCart) {
+                const accounts = appData.accounts.filter((a) =>
+                    item.accountIds.includes(a.id),
+                );
+                const endDate = new Date(item.endDate);
+                let assignedCount = 0;
+
+                for (const acc of accounts) {
+                    if (assignedCount >= item.quantity) break;
+                    for (let i = acc.profiles.length - 1; i >= 0; i--) {
+                        if (!acc.profiles[i].occupied && assignedCount < item.quantity) {
+                            acc.profiles[i].occupied = true;
+                            acc.profiles[i].clientId = pin;
+                            acc.profiles[i].expiryDate = endDate.toISOString();
+
+                            assignments.push({
+                                platform: item.platform,
+                                deviceType: item.deviceType,
+                                accountEmail: acc.email,
+                                password: acc.password,
+                                profileNumber: acc.profiles[i].number,
+                                durationMonths: item.durationMonths,
+                                durationDays: item.durationDays,
+                                expiryDate: endDate.toISOString(),
+                            });
+                            assignedCount++;
+                        }
+                    }
+                }
+                totalPaid += item.total;
+            }
+
+            const client = {
+                pin,
+                name: fullName,
+                firstName,
+                lastName,
+                startDate: startDate.toISOString(),
+                paymentDate,
+                totalPaid,
+                assignments,
+                active: true,
+            };
+
+            appData.clients.push(client);
+            saveData();
+            showRegistrationResult(pin, assignments, totalPaid, fullName);
+            currentCart = [];
+            updateAllViews();
+        });
+
+        function showRegistrationResult(pin, assignments, total, fullName) {
+            document.getElementById("clientForm").style.display = "none";
+            document.getElementById("registrationResult").style.display = "block";
+            document.getElementById("generatedPin").textContent = pin;
+
+            const container = document.getElementById("assignedProfiles");
+            container.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h4 style="color: var(--text-primary); margin-bottom: 5px;">${fullName}</h4>
+            <p style="color: var(--text-secondary); font-size: 14px;">Cliente registrado exitosamente</p>
+        </div>
+        <div class="summary-box" style="margin-bottom: 20px;">
+            <div class="summary-row" style="border: none; margin: 0; padding: 0;">
+                <span>Total Pagado:</span>
+                <span style="color: var(--accent-danger); font-size: 20px; font-weight: 800;">$${total.toFixed(2)}</span>
+            </div>
+            ${total < assignments.reduce((sum, a) => {
+                const acc = appData.accounts.find((ac) => ac.email === a.accountEmail);
+                return sum + (acc ? acc.pricePerProfile * (a.durationMonths || 1) : 0);
+            }, 0) ? `
+            <div style="margin-top: 8px; padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 6px; font-size: 12px; color: var(--success);">
+                🎉 Incluye descuento aplicado
+            </div>
+            ` : ""}
+        </div>
+        <h4 style="margin-bottom: 15px; color: var(--accent-primary);">📋 Perfiles Asignados:</h4>
+    `;
+
+            assignments.forEach((ass) => {
+                const div = document.createElement("div");
+                div.className = "client-result";
+                div.style.border = "2px solid rgba(59, 130, 246, 0.3)";
+                div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
+                    ${ass.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${ass.deviceType})</span>` : ""}<br>
+                    <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
+                </div>
+            </div>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px;">
+                <div style="margin-bottom: 4px;"><span style="color: var(--text-secondary);">📧</span> ${ass.accountEmail}</div>
+                <div style="margin-bottom: 4px;"><span style="color: var(--text-secondary);">🔑</span> ${ass.password}</div>
+                <div style="color: var(--warning); margin-top: 8px; font-weight: 600;">
+                    ⏰ Vence: <span class="date-display">${formatDate(ass.expiryDate)}</span> (${ass.durationDays} días)
+                </div>
+            </div>
+        `;
+                container.appendChild(div);
+            });
+
+            updateAllViews();
+        }
+
+        function renderClients() {
+            const tbody = document.getElementById("clientsTable");
+            tbody.innerHTML = "";
+
+            let sortedClients = [...appData.clients].sort((a, b) => {
+                const lastNameA = (
+                    a.lastName || a.name.split(" ").pop()
+                ).toLowerCase();
+                const lastNameB = (
+                    b.lastName || b.name.split(" ").pop()
+                ).toLowerCase();
+                return currentSort === "asc"
+                    ? lastNameA.localeCompare(lastNameB)
+                    : lastNameB.localeCompare(lastNameA);
+            });
+
+            if (sortedClients.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <div class="empty-state-icon">👥</div>
+                            <p>No hay clientes registrados</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            sortedClients.forEach((client) => {
+                const daysLeft = Math.max(
+                    0,
+                    ...client.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                );
+                const status = getStatusByDays(daysLeft);
+                const platforms = [
+                    ...new Set(client.assignments.map((a) => a.platform)),
+                ];
+                const lastName = client.lastName || client.name.split(" ").pop();
+                const firstName =
+                    client.firstName || client.name.replace(" " + lastName, "");
+
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td><strong style="font-family: monospace; font-size: 16px; color: var(--accent-danger);">${client.pin}</strong></td>
+                    <td><strong>${lastName}</strong>, ${firstName}</td>
+                    <td>${platforms.map((p) => PLATFORM_CONFIG[p].icon).join(" ")} (${platforms.length})</td>
+                    <td>
+                        <span class="date-display">${formatDate(Math.max(...client.assignments.map((a) => new Date(a.expiryDate))))}</span><br>
+                        <small style="color: ${daysLeft <= 3 ? "var(--accent-danger)" : daysLeft <= 10 ? "var(--warning)" : "var(--success)"};">${daysLeft} días</small>
+                    </td>
+                    <td><span class="badge ${status.class}">${status.text}</span></td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="btn btn-secondary" onclick="editClient('${client.pin}')" style="padding: 6px 10px;">✏️</button>
+                            <button class="btn btn-primary" onclick="viewClientDetails('${client.pin}')" style="padding: 6px 10px;">👁️</button>
+                            <button class="btn btn-warning" onclick="renewClient('${client.pin}')" style="padding: 6px 10px;">🔄</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleSort() {
+            currentSort = currentSort === "asc" ? "desc" : "asc";
+            document.getElementById("sortIcon").textContent =
+                currentSort === "asc" ? "📋" : "📋⬇️";
+            document.getElementById("sortText").textContent =
+                currentSort === "asc"
+                    ? "Ordenar por Apellido (A-Z)"
+                    : "Ordenar por Apellido (Z-A)";
+            renderClients();
+        }
+
+        function searchClients() {
+            const query = document
+                .getElementById("clientSearch")
+                .value.toLowerCase()
+                .trim();
+            const resultsDiv = document.getElementById("searchResults");
+            const listDiv = document.getElementById("searchResultsList");
+
+            if (query.length < 2) {
+                resultsDiv.style.display = "none";
+                return;
+            }
+
+            const matches = appData.clients.filter(
+                (c) =>
+                    c.name.toLowerCase().includes(query) ||
+                    (c.firstName && c.firstName.toLowerCase().includes(query)) ||
+                    (c.lastName && c.lastName.toLowerCase().includes(query)) ||
+                    c.pin.includes(query),
+            );
+
+            if (matches.length === 0) {
+                listDiv.innerHTML =
+                    '<p style="color: var(--text-secondary);">No se encontraron clientes</p>';
+            } else {
+                listDiv.innerHTML = "";
+                matches.forEach((client) => {
+                    const daysLeft = Math.max(
+                        0,
+                        ...client.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                    );
+                    const status = getStatusByDays(daysLeft);
+                    const platforms = [
+                        ...new Set(client.assignments.map((a) => a.platform)),
+                    ];
+                    const lastName = client.lastName || client.name.split(" ").pop();
+                    const firstName =
+                        client.firstName || client.name.replace(" " + lastName, "");
+
+                    const div = document.createElement("div");
+                    div.className = "client-result";
+                    div.style.cssText = "border: 2px solid rgba(59, 130, 246, 0.3); margin-bottom: 20px;";
+
+                    // Header con nombre y PIN
+                    let html = `
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 2px solid rgba(59, 130, 246, 0.2);">
+                    <div>
+                        <strong style="font-size: 20px; color: var(--text-primary);">${lastName}, ${firstName}</strong>
+                        <div style="color: var(--accent-danger); font-family: monospace; font-size: 22px; margin-top: 8px; font-weight: 700; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(59, 130, 246, 0.05)); padding: 8px 16px; border-radius: 8px; display: inline-block; border: 2px dashed var(--accent-danger);">
+                            PIN: ${client.pin}
+                        </div>
+                    </div>
+                    <span class="badge ${status.class}" style="font-size: 14px; padding: 8px 16px;">${status.text} • ${daysLeft} días</span>
+                </div>
+                
+                <!-- Información General -->
+                <div class="summary-box" style="margin-bottom: 20px;">
+                    <div class="detail-row">
+                        <span class="detail-label">💰 Total Pagado:</span>
+                        <span class="detail-value" style="color: var(--accent-success); font-size: 18px; font-weight: 700;">$${(client.totalPaid || 0).toFixed(2)}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📅 Fecha de Pago:</span>
+                        <span class="detail-value date-display">${formatDate(client.paymentDate)}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📊 Estado:</span>
+                        <span class="detail-value" style="color: ${daysLeft <= 3 ? 'var(--accent-danger)' : daysLeft <= 10 ? 'var(--warning)' : 'var(--accent-success)'}; font-weight: 700;">
+                            ${daysLeft <= 0 ? 'VENCIDO' : daysLeft <= 3 ? 'CRÍTICO' : daysLeft <= 10 ? 'POR VENCER' : 'ACTIVO'}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Plataformas Contratadas con Credenciales -->
+                <h4 style="margin: 20px 0 15px 0; color: var(--accent-primary); font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                    📺 Plataformas Contratadas (${client.assignments.length})
+                </h4>
+                <div style="display: grid; gap: 12px;">
+            `;
+
+                    // Detalles de cada plataforma/asignación
+                    client.assignments.forEach((ass) => {
+                        const config = PLATFORM_CONFIG[ass.platform];
+                        const assDaysLeft = getDaysRemaining(ass.expiryDate);
+                        const isExpired = assDaysLeft <= 0;
+
+                        html += `
+                    <div class="platform-detail-card" style="border: 2px solid ${isExpired ? 'var(--accent-danger)' : 'var(--accent-primary)'}; background: var(--bg-secondary); border-radius: 12px; padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 28px;">${config.icon}</span>
+                                <div>
+                                    <strong style="font-size: 16px; color: ${isExpired ? 'var(--accent-danger)' : 'var(--text-primary)'};">
+                                        ${ass.platform}
+                                    </strong>
+                                    ${ass.platform === "Netflix" ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${ass.deviceType}</div>` : ""}
+                                </div>
+                            </div>
+                            <span class="badge ${assDaysLeft <= 3 ? 'badge-danger' : assDaysLeft <= 10 ? 'badge-warning' : 'badge-success'}" style="font-size: 11px;">
+                                ${isExpired ? 'VENCIDO' : assDaysLeft + ' días'}
+                            </span>
+                        </div>
+                        
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-top: 10px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                                <span style="color: var(--text-secondary);">👤 Perfil #${ass.profileNumber}</span>
+                                <span style="color: var(--text-secondary);">${ass.durationMonths || 1} mes${(ass.durationMonths || 1) > 1 ? 'es' : ''}</span>
+                            </div>
+                            <div style="margin-bottom: 6px; font-family: monospace; font-size: 13px;">
+                                <span style="color: var(--text-secondary);">📧</span> 
+                                <span style="color: var(--accent-primary); font-weight: 600;">${ass.accountEmail}</span>
+                            </div>
+                            <div style="margin-bottom: 6px; font-family: monospace; font-size: 13px;">
+                                <span style="color: var(--text-secondary);">🔑</span> 
+                                <span style="color: var(--warning); font-weight: 600;">${ass.password}</span>
+                            </div>
+                            <div style="padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px; font-size: 12px;">
+                                <span style="color: var(--text-secondary);">⏰ Vence:</span> 
+                                <span class="date-display" style="color: var(--warning); font-weight: 600;">${formatDate(ass.expiryDate)}</span>
+                                <span style="color: var(--text-secondary); margin-left: 8px;">(${ass.durationDays || getExactDaysBetween(new Date(), ass.expiryDate)} días)</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                    });
+
+                    // Botones de acción
+                    html += `
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(59, 130, 246, 0.2);">
+                    <button class="btn btn-secondary" onclick="editClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        ✏️ Editar
+                    </button>
+                    <button class="btn btn-warning" onclick="renewClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        🔄 Renovar
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteClientFromSearch('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                        🗑️ Eliminar
+                    </button>
+                </div>
+            `;
+
+                    div.innerHTML = html;
+                    listDiv.appendChild(div);
+                });
+            }
+            resultsDiv.style.display = "block";
+        }
+
+        function deleteClientFromSearch(pin) {
+            const client = appData.clients.find((c) => c.pin === pin);
+            if (!client) return;
+
+            if (!confirm(`⚠️ ¿Eliminar permanentemente a ${client.name}?\n\nSe liberarán todos sus perfiles.`)) {
+                return;
+            }
+
+            appData.accounts.forEach((acc) => {
+                acc.profiles.forEach((p) => {
+                    if (p.clientId === pin) {
+                        p.occupied = false;
+                        p.clientId = null;
+                        p.expiryDate = null;
+                    }
+                });
+            });
+
+            appData.clients = appData.clients.filter((c) => c.pin !== pin);
+            saveData();
+
+            updateAllViews();
+            searchClients();
+
+            showNotification(`✅ Cliente ${client.name} eliminado correctamente`, "success");
+        }
+
+        function editClient(pin) {
+            const client = appData.clients.find((c) => c.pin === pin);
+            if (!client) return;
+
+            editingClientPin = pin;
+            document.getElementById("editClientOldPin").value = pin;
+            document.getElementById("editClientFirstName").value =
+                client.firstName || client.name.split(" ")[0] || "";
+            document.getElementById("editClientLastName").value =
+                client.lastName || client.name.split(" ").slice(1).join(" ") || "";
+            document.getElementById("editClientPin").value = client.pin;
+            document.getElementById("editClientPaymentDate").value =
+                client.paymentDate ? client.paymentDate.split("T")[0] : "";
+
+            renderEditCurrentAssignments(client);
+            editCurrentCart = [];
+            updateEditPlatformSelection();
+            document.getElementById("editPriceSummary").style.display = "none";
+            document.getElementById("editClientForm").style.display = "block";
+            document.getElementById("editRegistrationResult").style.display =
+                "none";
+
+            openModal("editClientModal");
+        }
+
+        function renderEditCurrentAssignments(client) {
+            const container = document.getElementById("editCurrentAssignments");
+            if (!client.assignments || client.assignments.length === 0) {
+                container.innerHTML =
+                    '<p style="color: var(--text-secondary);">No tiene plataformas contratadas</p>';
+                return;
+            }
+
+            container.innerHTML = "";
+            client.assignments.forEach((ass, idx) => {
+                const daysLeft = getDaysRemaining(ass.expiryDate);
+                const isExpired = daysLeft <= 0;
+                const config = PLATFORM_CONFIG[ass.platform];
+
+                const div = document.createElement("div");
+                div.className = "client-result";
+                div.style.cssText = `border: 2px solid ${isExpired ? "var(--accent-danger)" : "var(--accent-primary)"}; opacity: ${isExpired ? "0.6" : "1"}; margin-bottom: 10px;`;
+                div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 16px; color: ${isExpired ? "var(--accent-danger)" : "var(--text-primary)"};">
+                        ${config.icon} ${ass.platform}
+                    </strong>
+                    ${ass.platform === "Netflix" ? `<span style="color: var(--text-secondary); font-size: 12px;">(${ass.deviceType})</span>` : ""}
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Perfil #${ass.profileNumber} • ${ass.durationMonths || 1} mes${(ass.durationMonths || 1) > 1 ? "es" : ""}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 11px; color: var(--text-secondary);">Vence en:</div>
+                    <div style="color: ${daysLeft <= 3 ? "var(--accent-danger)" : daysLeft <= 10 ? "var(--warning)" : "var(--success)"}; font-weight: 700;">
+                        ${isExpired ? "VENCIDO" : daysLeft + " días"}
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button onclick="renewEditAssignment(${idx})" class="btn btn-warning" style="flex: 1; padding: 6px; font-size: 11px;">
+                    🔄 Renovar
+                </button>
+                <button onclick="removeEditAssignment(${idx})" class="btn btn-danger" style="flex: 1; padding: 6px; font-size: 11px;">
+                    ❌ Quitar
+                </button>
+            </div>
+        `;
+                container.appendChild(div);
+            });
+        }
+
+        function removeEditAssignment(assignmentIndex) {
+            const client = appData.clients.find((c) => c.pin === editingClientPin);
+            if (!client) return;
+
+            const assignment = client.assignments[assignmentIndex];
+
+            if (!confirm(`¿Quitar ${assignment.platform} (Perfil #${assignment.profileNumber}) de ${client.name}?\n\nEl perfil quedará libre para otros clientes.`)) {
+                return;
+            }
+
+            const account = appData.accounts.find(
+                (a) => a.email === assignment.accountEmail && a.platform === assignment.platform
+            );
+            if (account) {
+                const profile = account.profiles.find(
+                    (p) => p.number === assignment.profileNumber && p.clientId === client.pin
+                );
+                if (profile) {
+                    profile.occupied = false;
+                    profile.clientId = null;
+                    profile.expiryDate = null;
+                }
+            }
+
+            client.assignments.splice(assignmentIndex, 1);
+
+            if (client.assignments.length === 0) {
+                client.active = false;
+                client.totalPaid = 0;
+            }
+
+            saveData();
+
+            renderEditCurrentAssignments(client);
+            updateAllViews();
+
+            showNotification(`✅ ${assignment.platform} removido correctamente`, "success");
+        }
+
+        function updateEditPlatformSelection() {
+            const container = document.getElementById("editPlatformSelection");
+            container.innerHTML = "";
+
+            const availableAccounts = appData.accounts.filter((acc) =>
+                acc.profiles.some((p) => !p.occupied),
+            );
+            if (availableAccounts.length === 0) {
+                container.innerHTML =
+                    '<p style="color: var(--text-secondary);">No hay perfiles disponibles para agregar.</p>';
+                return;
+            }
+
+            const grouped = {};
+            availableAccounts.forEach((acc) => {
+                const key =
+                    acc.platform === "Netflix"
+                        ? `Netflix - ${acc.deviceType}`
+                        : acc.platform;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(acc);
+            });
+
+            Object.entries(grouped).forEach(([key, accounts]) => {
+                const platform = accounts[0].platform;
+                const deviceType = accounts[0].deviceType;
+                const config = PLATFORM_CONFIG[platform];
+                const availableCount = accounts.reduce(
+                    (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                    0,
+                );
+
+                const div = document.createElement("div");
+                div.className = "card";
+                div.style.marginBottom = "15px";
+                div.style.border = "2px solid rgba(59, 130, 246, 0.3)";
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 28px;">${config.icon}</span>
+                            <div>
+                                <div style="font-weight: 700; font-size: 16px;">${platform}</div>
+                                ${platform === "Netflix" ? `<span class="platform-subtype">${deviceType}</span>` : ""}
+                            </div>
+                        </div>
+                        <span class="badge badge-success">${availableCount} disponibles</span>
+                    </div>
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
+                            <select class="edit-duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updateEditPriceSummary();">
+                                <option value="1">1 Mes</option>
+                                <option value="3">3 Meses (-12%)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 12px; color: var(--text-secondary);">Cantidad</label>
+                            <input type="number" class="edit-quantity-input" data-platform="${platform}" data-device="${deviceType}" value="1" min="1" max="${availableCount}" style="width: 100%; margin-top: 4px;" onchange="updateEditPriceSummary()">
+                        </div>
+                        <div style="display: flex; align-items: end; height: 100%;">
+                            <button type="button" class="btn btn-primary" onclick="addToEditCart('${platform}', '${deviceType}', ${accounts.map((a) => a.id).join(",")})" style="margin-top: 20px;">Agregar</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addToEditCart(platform, deviceType, ...accountIds) {
+            const accounts = appData.accounts.filter((a) =>
+                accountIds.includes(a.id),
+            );
+            const available = accounts.reduce(
+                (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                0,
+            );
+            const container = event.target.closest(".card");
+            const durationMonths = parseInt(
+                container.querySelector(".edit-duration-select").value,
+            );
+            const quantity = parseInt(
+                container.querySelector(".edit-quantity-input").value,
+            );
+
+            if (quantity > available) {
+                alert(`⚠️ Solo hay ${available} perfiles disponibles`);
+                return;
+            }
+
+            const paymentDateInput = document.getElementById(
+                "editClientPaymentDate",
+            );
+            const startDate = paymentDateInput.value
+                ? new Date(paymentDateInput.value)
+                : new Date();
+            const endDate = calculateExpiryDate(startDate, durationMonths);
+            const exactDays = getExactDaysBetween(startDate, endDate);
+
+            const pricePerProfile = accounts[0].pricePerProfile;
+            let subtotal = pricePerProfile * quantity;
+            let discount = 0;
+            let discountType = "";
+
+            if (durationMonths === 3) {
+                subtotal = subtotal * 3;
+                discount = subtotal * 0.12;
+                discountType = "3 meses";
+            }
+
+            const item = {
+                platform,
+                deviceType,
+                durationMonths,
+                durationDays: exactDays,
+                quantity,
+                pricePerProfile,
+                subtotal,
+                discount,
+                discountType,
+                total: subtotal - discount,
+                accountIds,
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+            };
+
+            editCurrentCart.push(item);
+            updateEditPriceSummary();
+            event.target.textContent = "✓ Agregado";
+            event.target.disabled = true;
+            event.target.style.background = "var(--success)";
+        }
+
+        function updateEditPriceSummary() {
+            const summary = document.getElementById("editPriceSummary");
+            const content = document.getElementById("editSummaryContent");
+
+            if (editCurrentCart.length === 0) {
+                summary.style.display = "none";
+                return;
+            }
+
+            summary.style.display = "block";
+            let html = "";
+
+            let subtotalSinDescuento = 0;
+            editCurrentCart.forEach((item) => {
+                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
+                subtotalSinDescuento += itemSubtotalOriginal;
+            });
+
+            let hasThreeMonths = editCurrentCart.some((i) => i.durationMonths === 3);
+            let distinctPlatforms = new Set(editCurrentCart.map((i) => i.platform)).size;
+            let totalProfiles = editCurrentCart.reduce((sum, i) => sum + i.quantity, 0);
+            let hasThreeProfiles = totalProfiles >= 3;
+
+            let profileDiscountApplicable = distinctPlatforms >= 3 && hasThreeProfiles && !hasThreeMonths;
+
+            let hasThreeMonthsDiscount = hasThreeMonths && !profileDiscountApplicable;
+
+            let descuentoGlobal = 0;
+            let discountType = "";
+            let discountExplanation = "";
+
+            if (profileDiscountApplicable) {
+                descuentoGlobal = subtotalSinDescuento * 0.12;
+                discountType = "3 plataformas";
+                discountExplanation = `${distinctPlatforms} plataformas diferentes, ${totalProfiles} perfiles totales (-12%)`;
+            } else if (hasThreeMonthsDiscount) {
+                editCurrentCart.forEach((item) => {
+                    if (item.durationMonths === 3) {
+                        const itemSubtotalOriginal = item.pricePerProfile * item.quantity * 3;
+                        descuentoGlobal += itemSubtotalOriginal * 0.12;
+                    }
+                });
+                discountType = "3 meses";
+                discountExplanation = `Contratación de 3 meses en una o más plataformas (-12%)`;
+            }
+
+            let grandTotal = subtotalSinDescuento - descuentoGlobal;
+
+            editCurrentCart.forEach((item, idx) => {
+                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
+                let itemDisplayTotal = itemSubtotalOriginal;
+                let itemDisplayDiscount = 0;
+
+                if (profileDiscountApplicable) {
+                    const proporcion = itemSubtotalOriginal / subtotalSinDescuento;
+                    itemDisplayDiscount = descuentoGlobal * proporcion;
+                    itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
+
+                    item.discount = itemDisplayDiscount;
+                    item.total = itemDisplayTotal;
+                    item.discountType = "3 plataformas";
+                } else if (item.durationMonths === 3 && hasThreeMonthsDiscount) {
+                    itemDisplayDiscount = itemSubtotalOriginal * 0.12;
+                    itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
+
+                    item.discount = itemDisplayDiscount;
+                    item.total = itemDisplayTotal;
+                    item.discountType = "3 meses";
+                } else {
+                    item.discount = 0;
+                    item.total = itemSubtotalOriginal;
+                    item.discountType = "";
+                }
+
+                html += `
+            <div class="summary-row">
+                <div>
+                    ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
+                    ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
+                    <br><small style="color: var(--text-secondary);">
+                        ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
+                    </small>
+                    ${itemDisplayDiscount > 0 ? `<span class="discount-badge">AHORRO: $${itemDisplayDiscount.toFixed(2)}</span>` : ""}
+                </div>
+                <div style="font-weight: 700; color: ${itemDisplayDiscount > 0 ? "var(--success)" : "var(--text-primary)"};">
+                    $${itemDisplayTotal.toFixed(2)}
+                </div>
+            </div>
+        `;
+            });
+
+            if (descuentoGlobal > 0) {
+                html += `
+            <div class="summary-row" style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                <div>
+                    <strong style="color: var(--success);">🎉 Descuento por ${discountType}</strong>
+                    <br><small style="color: var(--text-secondary);">${discountExplanation}</small>
+                </div>
+                <div style="font-weight: 700; color: var(--success); font-size: 18px;">
+                    -$${descuentoGlobal.toFixed(2)}
+                </div>
+            </div>
+        `;
+            }
+
+            html += `
+        <div class="summary-row" style="margin-top: 10px;">
+            <span>TOTAL ADICIONAL A PAGAR</span>
+            <span style="color: var(--accent-danger); font-size: 24px;">$${grandTotal.toFixed(2)}</span>
+        </div>
+    `;
+            content.innerHTML = html;
+        }
+
+        function renewEditAssignment(assignmentIndex) {
+            const client = appData.clients.find((c) => c.pin === editingClientPin);
+            if (!client) return;
+
+            const months = prompt("¿Cuántos meses agregar? (1, 2 o 3):", "1");
+            if (!months || isNaN(months)) return;
+
+            const monthsNum = parseInt(months);
+            const assignment = client.assignments[assignmentIndex];
+            const currentExpiry = new Date(assignment.expiryDate);
+            const baseDate =
+                currentExpiry > new Date() ? currentExpiry : new Date();
+            const newEnd = calculateExpiryDate(baseDate, monthsNum);
+
+            assignment.expiryDate = newEnd.toISOString();
+            assignment.durationMonths =
+                (assignment.durationMonths || 1) + monthsNum;
+            assignment.durationDays = getExactDaysBetween(
+                new Date(assignment.startDate || baseDate),
+                newEnd,
+            );
+
+            const account = appData.accounts.find(
+                (a) =>
+                    a.email === assignment.accountEmail &&
+                    a.platform === assignment.platform,
+            );
+            if (account) {
+                const profile = account.profiles.find(
+                    (p) =>
+                        p.number === assignment.profileNumber &&
+                        p.clientId === client.pin,
+                );
+                if (profile) profile.expiryDate = newEnd.toISOString();
+            }
+
+            saveData();
+            renderEditCurrentAssignments(client);
+            updateAllViews();
+            alert(
+                `✅ Renovado por ${monthsNum} mes(es)\nNueva fecha: ${formatDate(newEnd)}`,
+            );
+        }
+
+        document
+            .getElementById("editClientForm")
+            .addEventListener("submit", (e) => {
+                e.preventDefault();
+
+                const oldPin = document.getElementById("editClientOldPin").value;
+                const newPin = document.getElementById("editClientPin").value;
+                const firstName = document
+                    .getElementById("editClientFirstName")
+                    .value.trim();
+                const lastName = document
+                    .getElementById("editClientLastName")
+                    .value.trim();
+
+                const currentDate = new Date().toISOString().split('T')[0];
+
+                if (!/^\d{4}$/.test(newPin)) {
+                    alert("⚠️ El PIN debe tener exactamente 4 dígitos numéricos");
+                    return;
+                }
+
+                if (
+                    newPin !== oldPin &&
+                    appData.clients.some((c) => c.pin === newPin)
+                ) {
+                    alert("⚠️ Este PIN ya está en uso por otro cliente");
+                    return;
+                }
+
+                const client = appData.clients.find((c) => c.pin === oldPin);
+                if (!client) {
+                    alert("⚠️ Error: Cliente no encontrado");
+                    return;
+                }
+
+                const newFullName = `${firstName} ${lastName}`;
+
+                if (newPin !== oldPin) {
+                    appData.accounts.forEach((acc) => {
+                        acc.profiles.forEach((p) => {
+                            if (p.clientId === oldPin) p.clientId = newPin;
+                        });
+                    });
+                    client.pin = newPin;
+                }
+
+                client.firstName = firstName;
+                client.lastName = lastName;
+                client.name = newFullName;
+
+                let newAssignments = [];
+                let totalAdditional = 0;
+
+                if (editCurrentCart.length > 0) {
+                    client.paymentDate = currentDate;
+
+                    const startDate = new Date(currentDate);
+
+                    for (const item of editCurrentCart) {
+                        const accounts = appData.accounts.filter((a) =>
+                            item.accountIds.includes(a.id),
+                        );
+                        const endDate = new Date(item.endDate);
+                        let assignedCount = 0;
+
+                        for (const acc of accounts) {
+                            if (assignedCount >= item.quantity) break;
+                            for (let i = acc.profiles.length - 1; i >= 0; i--) {
+                                if (
+                                    !acc.profiles[i].occupied &&
+                                    assignedCount < item.quantity
+                                ) {
+                                    acc.profiles[i].occupied = true;
+                                    acc.profiles[i].clientId = client.pin;
+                                    acc.profiles[i].expiryDate = endDate.toISOString();
+
+                                    newAssignments.push({
+                                        platform: item.platform,
+                                        deviceType: item.deviceType,
+                                        accountEmail: acc.email,
+                                        password: acc.password,
+                                        profileNumber: acc.profiles[i].number,
+                                        durationMonths: item.durationMonths,
+                                        durationDays: item.durationDays,
+                                        expiryDate: endDate.toISOString(),
+                                        startDate: startDate.toISOString(),
+                                    });
+                                    assignedCount++;
+                                }
+                            }
+                        }
+                        totalAdditional += item.total;
+                    }
+
+                    client.assignments.push(...newAssignments);
+
+                    const hasActiveAssignments = client.assignments.some(ass => {
+                        const daysLeft = getDaysRemaining(ass.expiryDate);
+                        return daysLeft > 0 && !newAssignments.includes(ass);
+                    });
+
+                    if (hasActiveAssignments) {
+                        client.totalPaid = (client.totalPaid || 0) + totalAdditional;
+                    } else {
+                        client.totalPaid = totalAdditional;
+                    }
+                }
+
+                saveData();
+
+                if (editCurrentCart.length > 0) {
+                    showEditRegistrationResult(
+                        client.pin,
+                        newAssignments,
+                        totalAdditional,
+                        client.name,
+                    );
+                } else {
+                    closeModal("editClientModal");
+                    updateAllViews();
+                    alert("✅ Datos del cliente actualizados correctamente");
+                }
+            });
+
+        function showEditRegistrationResult(pin, assignments, total, fullName) {
+            document.getElementById("editClientForm").style.display = "none";
+            document.getElementById("editRegistrationResult").style.display =
+                "block";
+            document.getElementById("editGeneratedPin").textContent = pin;
+
+            const container = document.getElementById("editAssignedProfiles");
+            container.innerHTML = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h4 style="color: var(--text-primary); margin-bottom: 5px;">${fullName}</h4>
+                    <p style="color: var(--text-secondary); font-size: 14px;">Plataformas agregadas exitosamente</p>
+                </div>
+                <div class="summary-box" style="margin-bottom: 20px;">
+                    <div class="summary-row" style="border: none; margin: 0; padding: 0;">
+                        <span>Total Adicional Pagado:</span>
+                        <span style="color: var(--accent-danger); font-size: 20px; font-weight: 800;">$${total.toFixed(2)}</span>
+                    </div>
+                </div>
+                <h4 style="margin-bottom: 15px; color: var(--accent-primary);">📋 Nuevos Perfiles Asignados:</h4>
+            `;
+
+            assignments.forEach((ass) => {
+                const div = document.createElement("div");
+                div.className = "client-result";
+                div.style.border = "2px solid rgba(59, 130, 246, 0.3)";
+                div.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
+                            ${ass.platform === "Netflix" ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}<br>
+                            <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px;">
+                        <div style="margin-bottom: 4px;"><span style="color: var(--text-secondary);">📧</span> ${ass.accountEmail}</div>
+                        <div style="margin-bottom: 4px;"><span style="color: var(--text-secondary);">🔑</span> ${ass.password}</div>
+                        <div style="color: var(--warning); margin-top: 8px; font-weight: 600;">
+                            ⏰ Vence: <span class="date-display">${formatDate(ass.expiryDate)}</span> (${ass.durationDays} días)
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function deleteCurrentClient() {
+            if (!editingClientPin) {
+                alert("⚠️ Error: No se ha seleccionado ningún cliente");
+                return;
+            }
+
+            if (
+                !confirm(
+                    "⚠️ ¿ESTÁS SEGURO?\n\nEsta acción liberará todos los perfiles ocupados por este cliente y eliminará todos sus datos permanentemente.\n\n¿Deseas continuar?",
+                )
+            ) {
+                return;
+            }
+
+            appData.accounts.forEach((acc) => {
+                acc.profiles.forEach((p) => {
+                    if (p.clientId === editingClientPin) {
+                        p.occupied = false;
+                        p.clientId = null;
+                        p.expiryDate = null;
+                    }
+                });
+            });
+
+            appData.clients = appData.clients.filter(
+                (c) => c.pin !== editingClientPin,
+            );
+            saveData();
+            closeModal("editClientModal");
+            updateAllViews();
+            alert("✅ Cliente eliminado y perfiles liberados correctamente");
+        }
+
+        function viewClientDetails(pin) {
+            const client = appData.clients.find((c) => c.pin === pin);
+            if (!client) return;
+
+            currentViewPin = pin;
+
+            document.getElementById("viewClientName").textContent = client.name;
+            document.getElementById("viewClientPin").textContent = client.pin;
+
+            document.getElementById("viewClientTotalPaid").textContent =
+                "$" + (client.totalPaid || 0).toFixed(2);
+            document.getElementById("viewClientPaymentDate").textContent =
+                formatDate(client.paymentDate);
+
+            const daysLeft = Math.max(
+                0,
+                ...client.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+            );
+            const status = getStatusByDays(daysLeft);
+            const statusEl = document.getElementById("viewClientStatus");
+            statusEl.textContent = status.text;
+            statusEl.style.color =
+                daysLeft <= 3
+                    ? "var(--accent-danger)"
+                    : daysLeft <= 10
+                        ? "var(--warning)"
+                        : "var(--accent-success)";
+
+            const container = document.getElementById("viewClientPlatforms");
+            container.innerHTML = "";
+
+            client.assignments.forEach((ass) => {
+                const config = PLATFORM_CONFIG[ass.platform];
+                const assDaysLeft = getDaysRemaining(ass.expiryDate);
+                const isExpired = assDaysLeft <= 0;
+
+                const card = document.createElement("div");
+                card.className = "platform-detail-card";
+                card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 24px;">${config.icon}</span>
+                        <strong style="font-size: 16px; color: ${isExpired ? "var(--accent-danger)" : "var(--text-primary)"};">
+                            ${ass.platform}
+                        </strong>
+                        ${ass.platform === "Netflix" ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
+                        👤 Perfil #${ass.profileNumber} • ${ass.durationMonths || 1} mes${(ass.durationMonths || 1) > 1 ? "es" : ""}
+                    </div>
+                </div>
+                <span class="badge ${assDaysLeft <= 3 ? "badge-danger" : assDaysLeft <= 10 ? "badge-warning" : "badge-success"}">
+                    ${isExpired ? "VENCIDO" : assDaysLeft + " días"}
+                </span>
+            </div>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: var(--text-secondary); font-size: 12px;">📧 Email:</span>
+                    <span style="font-size: 13px; font-family: monospace;">${ass.accountEmail}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: var(--text-secondary); font-size: 12px;">🔑 Contraseña:</span>
+                    <span style="font-size: 13px; font-family: monospace;">${ass.password}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary); font-size: 12px;">⏰ Vencimiento:</span>
+                    <span style="font-size: 13px; color: var(--warning);" class="date-display">${formatDate(ass.expiryDate)}</span>
+                </div>
+            </div>
+        `;
+                container.appendChild(card);
+            });
+
+            openModal("viewClientModal");
+        }
+
+        function renewClient(pin) {
+            const client = appData.clients.find((c) => c.pin === pin);
+            if (!client) return;
+
+            currentRenewPin = pin;
+            selectedRenewalMonths = 1;
+
+            document.getElementById("renewClientName").textContent = client.name;
+            document.getElementById("renewClientPin").textContent = client.pin;
+
+            const lastExpiry = new Date(
+                Math.max(...client.assignments.map((a) => new Date(a.expiryDate))),
+            );
+            document.getElementById("renewCurrentExpiry").textContent =
+                formatDate(lastExpiry);
+
+            document
+                .querySelectorAll(".renewal-option")
+                .forEach((opt) => opt.classList.remove("selected"));
+            document.getElementById("renewOption1").classList.add("selected");
+            document.getElementById("selectedRenewalMonths").value = "1";
+
+            calculateAndShowRenewalCost();
+
+            openModal("renewClientModal");
+        }
+
+        function selectRenewalMonths(months) {
+            selectedRenewalMonths = months;
+
+            const input = document.getElementById("selectedRenewalMonths");
+            if (input) {
+                input.value = months;
+            }
+
+            document
+                .querySelectorAll(".renewal-option")
+                .forEach((opt) => opt.classList.remove("selected"));
+            document
+                .getElementById(`renewOption${months}`)
+                .classList.add("selected");
+
+            calculateAndShowRenewalCost();
+        }
+
+        function calculateAndShowRenewalCost() {
+            const client = appData.clients.find((c) => c.pin === currentRenewPin);
+            if (!client) return;
+
+            const months = selectedRenewalMonths;
+
+            let platformCounts = {};
+            client.assignments.forEach((ass) => {
+                const key = ass.platform === "Netflix" ? `Netflix-${ass.deviceType}` : ass.platform;
+                if (!platformCounts[key]) {
+                    platformCounts[key] = { platform: ass.platform, deviceType: ass.deviceType, count: 0, price: 0 };
+                }
+                platformCounts[key].count++;
+            });
+
+            Object.keys(platformCounts).forEach((key) => {
+                const info = platformCounts[key];
+                const account = appData.accounts.find((a) =>
+                    a.platform === info.platform &&
+                    (info.platform !== "Netflix" || a.deviceType === info.deviceType)
+                );
+                if (account) {
+                    info.price = account.pricePerProfile;
+                }
+            });
+
+            let subtotal = 0;
+            Object.values(platformCounts).forEach((info) => {
+                subtotal += info.price * info.count * months;
+            });
+
+            let discount = 0;
+            let discountText = "";
+
+            const hasThreeMonths = months === 3;
+
+            const distinctPlatforms = Object.keys(platformCounts).length;
+            const totalProfiles = Object.values(platformCounts).reduce((sum, info) => sum + info.count, 0);
+            const hasThreePlatforms = distinctPlatforms >= 3 && totalProfiles >= 3;
+
+            if (hasThreeMonths || hasThreePlatforms) {
+                discount = subtotal * 0.12;
+
+                if (hasThreeMonths && hasThreePlatforms) {
+                    discountText = " (12% OFF por 3 meses y 3+ plataformas)";
+                } else if (hasThreeMonths) {
+                    discountText = " (12% OFF por 3 meses)";
+                } else {
+                    discountText = ` (12% OFF por ${distinctPlatforms} plataformas)`;
+                }
+            }
+
+            const total = subtotal - discount;
+            renewalCostPreview = total;
+
+            updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText);
+        }
+
+        function updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText) {
+            const client = appData.clients.find((c) => c.pin === currentRenewPin);
+            if (!client) return;
+
+            const lastExpiry = new Date(
+                Math.max(...client.assignments.map((a) => new Date(a.expiryDate)))
+            );
+            const baseDate = lastExpiry > new Date() ? lastExpiry : new Date();
+            const newEnd = calculateExpiryDate(baseDate, months);
+
+            const summary = document.getElementById("renewalSummary");
+            summary.style.display = "block";
+
+            summary.innerHTML = `
+        <h4 style="margin-bottom: 15px; color: var(--accent-primary)">
+            💰 Resumen de Renovación
+        </h4>
+        <div class="detail-row">
+            <span class="detail-label">Duración:</span>
+            <span class="detail-value">${months} mes${months > 1 ? "es" : ""}${discountText}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Subtotal:</span>
+            <span class="detail-value">$${subtotal.toFixed(2)}</span>
+        </div>
+        ${discount > 0 ? `
+        <div class="detail-row" style="color: var(--success)">
+            <span class="detail-label">Descuento (12%):</span>
+            <span class="detail-value">-$${discount.toFixed(2)}</span>
+        </div>
+        ` : ""}
+        <div class="detail-row" style="border-top: 2px solid var(--accent-primary); padding-top: 10px; margin-top: 10px;">
+            <span class="detail-label" style="font-size: 16px; font-weight: 700;">TOTAL A COBRAR:</span>
+            <span class="detail-value" style="font-size: 24px; font-weight: 800; color: var(--accent-danger);">
+                $${total.toFixed(2)}
+            </span>
+        </div>
+        <div class="detail-row" style="margin-top: 15px;">
+            <span class="detail-label">Nueva fecha de vencimiento:</span>
+            <span class="detail-value" style="color: var(--accent-success); font-weight: 700;">
+                ${formatDate(newEnd)}
+            </span>
+        </div>
+    `;
+        }
+
+        function confirmRenewal() {
+            const months = selectedRenewalMonths;
+
+            if (!months || isNaN(months) || months < 1 || months > 3) {
+                alert("⚠️ Selecciona una duración válida (1, 2 o 3 meses)");
+                return;
+            }
+
+            const client = appData.clients.find((c) => c.pin === currentRenewPin);
+            if (!client) {
+                alert("⚠️ Error: Cliente no encontrado");
+                return;
+            }
+
+            const lastExpiry = new Date(
+                Math.max(...client.assignments.map((a) => new Date(a.expiryDate)))
+            );
+            const baseDate = lastExpiry > new Date() ? lastExpiry : new Date();
+            const newEnd = calculateExpiryDate(baseDate, months);
+
+            let platformCounts = {};
+            client.assignments.forEach((ass) => {
+                const key = ass.platform === "Netflix" ? `Netflix-${ass.deviceType}` : ass.platform;
+                if (!platformCounts[key]) {
+                    platformCounts[key] = { count: 0, price: 0 };
+                }
+                platformCounts[key].count++;
+            });
+
+            Object.keys(platformCounts).forEach((key) => {
+                const info = platformCounts[key];
+                const [platform, deviceType] = key.includes('-') ? key.split('-') : [key, null];
+                const account = appData.accounts.find((a) =>
+                    a.platform === platform &&
+                    (platform !== "Netflix" || a.deviceType === deviceType)
+                );
+                if (account) info.price = account.pricePerProfile;
+            });
+
+            let subtotal = 0;
+            Object.values(platformCounts).forEach((info) => {
+                subtotal += info.price * info.count * months;
+            });
+
+            const distinctPlatforms = Object.keys(platformCounts).length;
+            const totalProfiles = Object.values(platformCounts).reduce((sum, info) => sum + info.count, 0);
+            const hasThreePlatforms = distinctPlatforms >= 3 && totalProfiles >= 3;
+            const hasThreeMonths = months === 3;
+
+            let discount = 0;
+            if (hasThreeMonths || hasThreePlatforms) {
+                discount = subtotal * 0.12;
+            }
+
+            let renewalCost = subtotal - discount;
+
+            const confirmMessage = `¿Confirmar renovación?\n\n` +
+                `Cliente: ${client.name}\n` +
+                `Duración: ${months} mes(es)\n` +
+                (discount > 0 ? `Subtotal: $${subtotal.toFixed(2)}\nDescuento (12%): -$${discount.toFixed(2)}\n` : ``) +
+                `Monto a cobrar: $${renewalCost.toFixed(2)}\n\n` +
+                `¿Proceder?`;
+
+            if (!confirm(confirmMessage)) return;
+
+            client.totalPaid = renewalCost;
+            client.paymentDate = new Date().toISOString().split('T')[0];
+
+            client.assignments.forEach((ass) => {
+                ass.expiryDate = newEnd.toISOString();
+                ass.durationMonths = months;
+
+                const account = appData.accounts.find((a) => a.email === ass.accountEmail);
+                if (account) {
+                    const profile = account.profiles.find(
+                        (p) => p.number === ass.profileNumber && p.clientId === currentRenewPin
+                    );
+                    if (profile) profile.expiryDate = newEnd.toISOString();
+                }
+            });
+
+            saveData();
+            closeModal('renewClientModal');
+            updateAllViews();
+
+            showNotification(
+                `✅ Suscripción renovada\n💰 Cobrado: $${renewalCost.toFixed(2)}\n📅 Nueva fecha: ${formatDate(newEnd)}`,
+                "success"
+            );
+        }
+
+        function showNotification(message, type = "success") {
+            const notification = document.createElement("div");
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === "success" ? "linear-gradient(135deg, var(--success), #059669)" : "linear-gradient(135deg, var(--accent-danger), var(--accent-danger-dark))"};
+                color: white;
+                padding: 20px 25px;
+                border-radius: 12px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+                z-index: 3000;
+                font-weight: 600;
+                max-width: 400px;
+                animation: slideIn 0.3s ease-out;
+                border: 2px solid rgba(255,255,255,0.1);
+            `;
+            notification.innerHTML = message.replace(/\n/g, "<br>");
+
+            const style = document.createElement("style");
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = "slideOut 0.3s ease-out";
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        function updateDashboard() {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            document.getElementById("currentMonthBanner").textContent =
+                `💰 Flujo de Caja de ${MONTH_NAMES[currentMonth]} ${currentYear}`;
+
+            const monthlyIncome = calculateMonthlyIncome(currentMonth, currentYear);
+
+            const monthlyCosts = calculateMonthlyCosts();
+
+            const netCash = monthlyIncome - monthlyCosts;
+
+            document.getElementById("cashInHand").textContent =
+                "$" + monthlyIncome.toFixed(2);
+            document.getElementById("monthlyCosts").textContent =
+                "$" + monthlyCosts.toFixed(2);
+            document.getElementById("netCashFlow").textContent =
+                (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
+
+            const netCard = document.getElementById("netCashCard");
+            const netText = document.getElementById("netCashText");
+
+            if (netCash >= 0) {
+                netCard.className = "stat-card success";
+                netText.textContent = "✅ Tienes ganancia este mes";
+            } else {
+                netCard.className = "stat-card danger";
+                netText.textContent = "⚠️ Estás en números rojos";
+            }
+
+            const activeClients = appData.clients.filter((c) => {
+                const days = Math.max(
+                    0,
+                    ...c.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                );
+                return days > 0;
+            });
+            document.getElementById("totalClients").textContent =
+                activeClients.length;
+
+            const alertsContainer = document.getElementById("alertsContainer");
+            const expiringSoon = appData.clients.filter((c) => {
+                const days = Math.max(
+                    0,
+                    ...c.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                );
+                return days > 3 && days <= 10;
+            });
+            const critical = appData.clients.filter((c) => {
+                const days = Math.max(
+                    0,
+                    ...c.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                );
+                return days <= 3 && days > 0;
+            });
+
+            const allExpiring = [...expiringSoon, ...critical].sort(
+                (a, b) =>
+                    Math.max(
+                        ...a.assignments.map((x) => getDaysRemaining(x.expiryDate)),
+                    ) -
+                    Math.max(
+                        ...b.assignments.map((x) => getDaysRemaining(x.expiryDate)),
+                    ),
+            );
+
+            if (allExpiring.length === 0) {
+                alertsContainer.innerHTML =
+                    '<p style="color: var(--text-secondary); text-align: center; padding: 40px;">🎉 No hay alertas pendientes</p>';
+            } else {
+                alertsContainer.innerHTML = "";
+                allExpiring.forEach((client) => {
+                    const days = Math.max(
+                        0,
+                        ...client.assignments.map((a) => getDaysRemaining(a.expiryDate)),
+                    );
+                    const status = getStatusByDays(days);
+                    const alert = document.createElement("div");
+                    alert.className = "card";
+                    alert.style.cssText = `border-left: 4px solid var(--${status.color}); margin-bottom: 10px;`;
+                    alert.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="font-size: 16px;">${client.name}</strong>
+                                <div style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">PIN: ${client.pin} • ${[...new Set(client.assignments.map((a) => a.platform))].join(", ")}</div>
+                            </div>
+                            <span class="badge ${status.class}">${days} días</span>
+                        </div>
+                    `;
+                    alertsContainer.appendChild(alert);
+                });
+            }
+
+            const dashboardAccounts = document.getElementById("dashboardAccounts");
+            dashboardAccounts.innerHTML = "";
+
+            const summary = {};
+            appData.accounts.forEach((acc) => {
+                const key =
+                    acc.platform === "Netflix"
+                        ? `Netflix - ${acc.deviceType}`
+                        : acc.platform;
+                if (!summary[key])
+                    summary[key] = {
+                        total: 0,
+                        available: 0,
+                        icon: PLATFORM_CONFIG[acc.platform].icon,
+                        color: PLATFORM_CONFIG[acc.platform].color,
+                    };
+                summary[key].total += acc.maxProfiles;
+                summary[key].available += acc.profiles.filter(
+                    (p) => !p.occupied,
+                ).length;
+            });
+
+            Object.entries(summary).forEach(([key, data]) => {
+                const card = document.createElement("div");
+                card.className = "platform-card";
+                card.innerHTML = `
+                    <div class="platform-header">
+                        <div class="platform-name">
+                            <div class="platform-icon ${data.color}">${data.icon}</div>
+                            <div style="font-size: 14px;">${key}</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin: 15px 0;">
+                        <div style="font-size: 36px; font-weight: 800; color: var(--accent-primary);">${data.available}</div>
+                        <div style="color: var(--text-secondary); font-size: 12px;">disponibles de ${data.total}</div>
+                    </div>
+                    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: var(--text-secondary);">Ocupados: ${data.total - data.available}</div>
+                `;
+                dashboardAccounts.appendChild(card);
+            });
+        }
+
+        function updateFinanceView() {
+            document.getElementById("financeMonthBanner").textContent =
+                `💰 Flujo de Caja de ${MONTH_NAMES[selectedMonth]} ${selectedYear}`;
+
+            const monthlyIncome = calculateMonthlyIncome(
+                selectedMonth,
+                selectedYear,
+            );
+            const monthlyCosts = calculateMonthlyCosts();
+            const netCash = monthlyIncome - monthlyCosts;
+
+            document.getElementById("selectedMonthIncome").textContent =
+                "$" + monthlyIncome.toFixed(2);
+            document.getElementById("selectedMonthCosts").textContent =
+                "$" + monthlyCosts.toFixed(2);
+            document.getElementById("selectedMonthNet").textContent =
+                (netCash >= 0 ? "+" : "") + "$" + netCash.toFixed(2);
+
+            const netCard = document.getElementById("selectedNetCard");
+            if (netCash >= 0) {
+                netCard.className = "stat-card success";
+            } else {
+                netCard.className = "stat-card danger";
+            }
+
+            const breakdown = document.getElementById("platformBreakdown");
+            let html = "";
+
+            const platformIncome = {};
+            appData.clients.forEach((client) => {
+                if (isPaymentInSelectedMonth(client.paymentDate)) {
+                    client.assignments.forEach((ass) => {
+                        if (!platformIncome[ass.platform])
+                            platformIncome[ass.platform] = 0;
+                        const acc = appData.accounts.find(
+                            (a) =>
+                                a.email === ass.accountEmail && a.platform === ass.platform,
+                        );
+                        if (acc) {
+                            const months = ass.durationMonths || 1;
+                            const price =
+                                acc.pricePerProfile * months * (months === 3 ? 0.88 : 1);
+                            platformIncome[ass.platform] += price;
+                        }
+                    });
+                }
+            });
+
+            const platformCosts = {};
+            appData.accounts.forEach((acc) => {
+                if (!platformCosts[acc.platform]) platformCosts[acc.platform] = 0;
+                platformCosts[acc.platform] += acc.cost;
+            });
+
+            const allPlatforms = [
+                ...new Set([
+                    ...Object.keys(platformIncome),
+                    ...Object.keys(platformCosts),
+                ]),
+            ];
+
+            if (allPlatforms.length === 0) {
+                html =
+                    '<p style="color: var(--text-secondary);">No hay datos para este mes</p>';
+            } else {
+                html +=
+                    '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">';
+
+                allPlatforms.forEach((platform) => {
+                    const income = platformIncome[platform] || 0;
+                    const cost = platformCosts[platform] || 0;
+                    const profit = income - cost;
+                    const config = PLATFORM_CONFIG[platform];
+
+                    html += `
+                        <div class="finance-card" style="border: 2px solid ${profit >= 0 ? "var(--success)" : "var(--accent-danger)"};">
+                            <div class="finance-title">
+                                <span style="font-size: 24px;">${config?.icon || "📺"}</span>
+                                ${platform}
+                            </div>
+                            <div class="finance-row">
+                                <span>Ingresos del mes:</span>
+                                <strong style="color: var(--accent-primary);">$${income.toFixed(2)}</strong>
+                            </div>
+                            <div class="finance-row">
+                                <span>Costo mensual:</span>
+                                <strong style="color: var(--accent-danger);">$${cost.toFixed(2)}</strong>
+                            </div>
+                            <div class="finance-row total" style="border-top: 2px solid ${profit >= 0 ? "var(--success)" : "var(--accent-danger)"};">
+                                <span>Ganancia:</span>
+                                <strong style="color: ${profit >= 0 ? "var(--success)" : "var(--accent-danger)"}; font-size: 18px;">
+                                    ${profit >= 0 ? "+" : ""}$${profit.toFixed(2)}
+                                </strong>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += "</div>";
+            }
+
+            breakdown.innerHTML = html;
+
+            const select = document.getElementById("paymentAccount");
+            select.innerHTML = '<option value="">Selecciona una cuenta...</option>';
+
+            const netflixByEmail = {};
+            const otherAccounts = [];
+
+            appData.accounts.forEach((acc) => {
+                if (acc.platform === "Netflix") {
+                    if (!netflixByEmail[acc.email]) netflixByEmail[acc.email] = [];
+                    netflixByEmail[acc.email].push(acc);
+                } else {
+                    otherAccounts.push(acc);
+                }
+            });
+
+            if (Object.keys(netflixByEmail).length > 0) {
+                const netflixGroup = document.createElement("optgroup");
+                netflixGroup.label = "🎬 Netflix (por cuenta de correo)";
+                Object.entries(netflixByEmail).forEach(([email, accounts]) => {
+                    const totalCost = accounts.reduce((sum, a) => sum + a.cost, 0);
+                    const types = accounts.map((a) => a.deviceType).join(" + ");
+                    const option = document.createElement("option");
+                    option.value = accounts[0].id;
+                    option.dataset.netflixGroup = JSON.stringify(
+                        accounts.map((a) => a.id),
+                    );
+                    option.textContent = `${email} (${types}) - $${totalCost.toFixed(2)}/mes`;
+                    netflixGroup.appendChild(option);
+                });
+                select.appendChild(netflixGroup);
+            }
+
+            if (otherAccounts.length > 0) {
+                const otherGroup = document.createElement("optgroup");
+                otherGroup.label = "📺 Otras Plataformas";
+                otherAccounts.forEach((acc) => {
+                    const option = document.createElement("option");
+                    option.value = acc.id;
+                    option.textContent = `${acc.platform} - ${acc.email} ($${acc.cost.toFixed(2)}/mes)`;
+                    otherGroup.appendChild(option);
+                });
+                select.appendChild(otherGroup);
+            }
+
+            const list = document.getElementById("paymentList");
+            const sorted = appData.payments.sort(
+                (a, b) => new Date(b.date) - new Date(a.date),
+            );
+
+            if (sorted.length === 0) {
+                list.innerHTML =
+                    '<p style="color: var(--text-secondary); margin-top: 20px;">No hay pagos registrados</p>';
+            } else {
+                list.innerHTML =
+                    '<h4 style="margin: 20px 0 10px 0; font-size: 14px; color: var(--accent-primary);">Últimos Pagos</h4>';
+                sorted.slice(0, 5).forEach((pay) => {
+                    const div = document.createElement("div");
+                    div.style.cssText =
+                        "padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px; font-size: 13px; border-left: 3px solid var(--accent-danger);";
+                    div.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <strong>${pay.platform}</strong>
+                            <span style="color: var(--accent-danger); font-weight: 700;">-$${pay.amount.toFixed(2)}</span>
+                        </div>
+                        <div style="color: var(--text-secondary); font-size: 11px;">
+                            ${pay.email} • <span class="date-display">${formatDate(pay.date)}</span>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            }
+
+            const upcoming = document.getElementById("upcomingPayments");
+            const nextPayments = appData.accounts
+                .map((a) => ({ ...a, daysLeft: getDaysRemaining(a.nextPayment) }))
+                .sort((a, b) => a.daysLeft - b.daysLeft)
+                .slice(0, 5);
+
+            if (nextPayments.length > 0) {
+                upcoming.innerHTML =
+                    '<h4 style="margin-bottom: 10px; color: var(--accent-primary); font-size: 14px;">Próximos Pagos</h4>';
+                nextPayments.forEach((acc) => {
+                    const div = document.createElement("div");
+                    div.style.cssText = `padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px; font-size: 12px; border-left: 3px solid ${acc.daysLeft <= 3 ? "var(--accent-danger)" : acc.daysLeft <= 7 ? "var(--warning)" : "var(--accent-primary)"}`;
+                    div.innerHTML = `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 600;">${acc.platform} ${acc.platform === "Netflix" ? `(${acc.deviceType})` : ""}</span>
+                            <span style="color: ${acc.daysLeft <= 3 ? "var(--accent-danger)" : acc.daysLeft <= 7 ? "var(--warning)" : "var(--accent-primary)"}; font-weight: 700;">
+                                ${acc.daysLeft} días
+                            </span>
+                        </div>
+                        <div style="color: var(--text-secondary); margin-top: 4px;">
+                            $${acc.cost.toFixed(2)} • <span class="date-display">${formatDate(acc.nextPayment)}</span>
+                        </div>
+                    `;
+                    upcoming.appendChild(div);
+                });
+            } else {
+                upcoming.innerHTML =
+                    '<p style="color: var(--text-secondary);">No hay pagos pendientes</p>';
+            }
+        }
+
+        document.getElementById("paymentForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const select = document.getElementById("paymentAccount");
+            const selectedOption = select.options[select.selectedIndex];
+            let accountIds = [];
+
+            if (selectedOption.dataset.netflixGroup) {
+                accountIds = JSON.parse(selectedOption.dataset.netflixGroup);
+            } else {
+                accountIds = [parseInt(select.value)];
+            }
+
+            const amount = parseFloat(
+                document.getElementById("paymentAmount").value,
+            );
+            const date = document.getElementById("paymentDate").value;
+            const amountPerAccount = amount / accountIds.length;
+
+            accountIds.forEach((accId, index) => {
+                const account = appData.accounts.find((a) => a.id === accId);
+                if (!account) return;
+
+                const payment = {
+                    id: Date.now() + index,
+                    accountId: accId,
+                    platform: account.platform,
+                    email: account.email,
+                    amount: accountIds.length === 1 ? amount : amountPerAccount,
+                    date: date,
+                    nextPayment: new Date(
+                        new Date(date).getTime() + 30 * 24 * 60 * 60 * 1000,
+                    )
+                        .toISOString()
+                        .split("T")[0],
+                };
+
+                appData.payments.push(payment);
+                account.nextPayment = payment.nextPayment;
+            });
+
+            saveData();
+            e.target.reset();
+            updateFinanceView();
+            renderAccounts();
+            showNotification(
+                `✅ Pago registrado para ${accountIds.length} cuenta(s)`,
+                "success",
+            );
+        });
+
+        function updateAllViews() {
+            updateDashboard();
+            renderAccounts();
+            renderClients();
+            updateFinanceView();
+        }
+
+        window.onclick = function (event) {
+            if (event.target.classList.contains("modal")) {
+                event.target.classList.remove("active");
+            }
+        };
+    </script>
+</body>
+
+</html>
