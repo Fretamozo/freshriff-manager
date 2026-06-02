@@ -619,6 +619,10 @@
             background: linear-gradient(135deg, #1d1d1f, #000000);
         }
 
+        .paramount {
+            background: linear-gradient(135deg, #0064ff, #0047b3);
+        }
+
         .profile-slots {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -1321,6 +1325,8 @@
         }
     </style>
 <base target="_blank">
+<base target="_blank">
+<base target="_blank">
 </head>
 
 <body>
@@ -1599,6 +1605,7 @@
                             <option value="Universal+">Universal+</option>
                             <option value="Crunchyroll">Crunchyroll</option>
                             <option value="Apple TV+">Apple TV+</option>
+                            <option value="Paramount+">Paramount+</option>
                         </select>
                     </div>
 
@@ -1765,10 +1772,12 @@
 
                     <div class="info-box">
                         <strong>💡 Descuentos Disponibles:</strong><br />
-                        • <span class="highlight-danger">12% OFF</span> por contratar 3
-                        meses<br />
-                        • <span class="highlight-danger">12% OFF</span> por contratar 3
-                        perfiles de plataformas distintas<br />
+                        • <span class="highlight-danger">10% OFF</span> por contratar 3 meses<br />
+                        • <span class="highlight-danger">10% OFF</span> por 3 plataformas distintas<br />
+                        • <span class="highlight-danger">12% OFF</span> por 4 plataformas distintas<br />
+                        • <span class="highlight-danger">15% OFF</span> por 5 plataformas distintas<br />
+                        • <span class="highlight-danger">18% OFF</span> por 6 plataformas distintas<br />
+                        • <span class="highlight-danger">20% OFF</span> por 7 o más plataformas distintas<br />
                         <small style="color: var(--text-secondary)">(Solo aplica un descuento, el mayor
                             beneficio)</small>
                     </div>
@@ -2029,7 +2038,7 @@
 
                 <div class="renewal-option" onclick="selectRenewalMonths(3)" id="renewOption3">
                     <div class="renewal-months">3 Meses</div>
-                    <div class="renewal-price">Ahorra 12%</div>
+                    <div class="renewal-price">Ahorra 10%</div>
                     <span class="renewal-discount">MEJOR OPCIÓN</span>
                 </div>
 
@@ -2060,6 +2069,7 @@
     <!-- REEMPLAZA TODO EL SCRIPT ACTUAL CON ESTO -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
     <script>
         // 🔴 REEMPLAZA con tu firebaseConfig
@@ -2075,12 +2085,6 @@
         // Inicializar Firebase (versión compat, no module)
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-
-        // CREDENCIALES DE ADMINISTRADOR
-        const ADMIN_CREDENTIALS = {
-            email: "fretamozo555@gmail.com",
-            password: "@HoraDeAventura23"
-        };
 
         // Variables globales
         let appData = { accounts: [], clients: [], payments: [] };
@@ -2108,9 +2112,10 @@
             "Prime Video": { icon: "📦", color: "prime", hasSubtypes: false, profiles: 6 },
             "HBO Max": { icon: "🎭", color: "hbo", hasSubtypes: false, profiles: 5 },
             "YouTube Premium": { icon: "▶️", color: "youtube", hasSubtypes: false, profiles: 5 },
-            "Universal+": { icon: "🌍", color: "universal", hasSubtypes: false, profiles: 4 },
-            "Crunchyroll": { icon: "🍥", color: "crunchyroll", hasSubtypes: false, profiles: 4 },
-            "Apple TV+": { icon: "🍎", color: "appletv", hasSubtypes: false, profiles: 5 },
+            "Universal+": { icon: "🌍", color: "universal", hasSubtypes: false, profiles: 5 },
+            "Crunchyroll": { icon: "🍥", color: "crunchyroll", hasSubtypes: false, profiles: 5 },
+            "Apple TV+": { icon: "🍎", color: "appletv", hasSubtypes: false, profiles: 6 },
+            "Paramount+": { icon: "⛰️", color: "paramount", hasSubtypes: false, profiles: 6 },
         };
 
         // 🔥 GUARDAR en Firebase
@@ -2205,7 +2210,9 @@
             const password = document.getElementById("loginPassword").value;
             const errorDiv = document.getElementById("loginError");
 
-            if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
+            firebase.auth().signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                // Login exitoso
                 sessionStorage.setItem("freshRiffAuth", "true");
                 sessionStorage.setItem("freshRiffUser", email);
                 errorDiv.classList.remove("show");
@@ -2213,11 +2220,13 @@
                 loadData().then(() => {
                     setupRealtimeListener();
                 });
-            } else {
+            })
+            .catch((error) => {
+                // Login fallido
                 errorDiv.classList.add("show");
                 document.getElementById("loginPassword").value = "";
                 document.getElementById("loginPassword").focus();
-            }
+            });
         }
 
         function showLoginScreen() {
@@ -2698,7 +2707,7 @@
                         <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
                         <select class="duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updatePriceSummary(); updateDatePreview(this.closest('.card'), parseInt(this.value));">
                             <option value="1">1 Mes</option>
-                            <option value="3">3 Meses (-12%)</option>
+                            <option value="3">3 Meses (-10%)</option>
                         </select>
                     </div>
                     <div style="flex: 1;">
@@ -2743,7 +2752,7 @@
 
             if (durationMonths === 3) {
                 subtotal = subtotal * 3;
-                discount = subtotal * 0.12;
+                discount = subtotal * 0.10;
                 discountType = "3 meses";
             }
 
@@ -2783,64 +2792,79 @@
             summary.style.display = "block";
             let html = "";
 
-            let subtotalSinDescuento = 0;
-            currentCart.forEach((item) => {
-                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
-                subtotalSinDescuento += itemSubtotalOriginal;
+            // ===== SEPARAR POR CATEGORÍA =====
+            const itemsCantidad = currentCart.filter(item => item.durationMonths === 1);
+            const itemsTiempo = currentCart.filter(item => item.durationMonths === 3);
+
+            // ===== DESCUENTO POR CANTIDAD (solo items de 1 mes) =====
+            let subtotalCantidad = 0;
+            itemsCantidad.forEach((item) => {
+                subtotalCantidad += item.pricePerProfile * item.quantity * item.durationMonths;
             });
 
-            let hasThreeMonths = currentCart.some((i) => i.durationMonths === 3);
-            let distinctPlatforms = new Set(currentCart.map((i) => i.platform)).size;
-            let totalProfiles = currentCart.reduce((sum, i) => sum + i.quantity, 0);
-            let hasThreeProfiles = totalProfiles >= 3;
+            const distinctPlatformsCantidad = new Set(itemsCantidad.map((i) => i.platform)).size;
+            const totalProfilesCantidad = itemsCantidad.reduce((sum, i) => sum + i.quantity, 0);
 
-            let profileDiscountApplicable = distinctPlatforms >= 3 && hasThreeProfiles && !hasThreeMonths;
-            let hasThreeMonthsDiscount = hasThreeMonths && !profileDiscountApplicable;
-
-            let descuentoGlobal = 0;
-            let discountType = "";
-            let discountExplanation = "";
-
-            if (profileDiscountApplicable) {
-                descuentoGlobal = subtotalSinDescuento * 0.12;
-                discountType = "3 plataformas";
-                discountExplanation = `${distinctPlatforms} plataformas diferentes, ${totalProfiles} perfiles totales (-12%)`;
-            } else if (hasThreeMonthsDiscount) {
-                currentCart.forEach((item) => {
-                    if (item.durationMonths === 3) {
-                        const itemSubtotalOriginal = item.pricePerProfile * item.quantity * 3;
-                        descuentoGlobal += itemSubtotalOriginal * 0.12;
-                    }
-                });
-                discountType = "3 meses";
-                discountExplanation = `Contratación de 3 meses en una o más plataformas (-12%)`;
+            let descuentoCantidadRate = 0;
+            let descuentoCantidadLabel = "";
+            if (distinctPlatformsCantidad >= 7) {
+                descuentoCantidadRate = 0.20;
+                descuentoCantidadLabel = "7+ plataformas";
+            } else if (distinctPlatformsCantidad === 6) {
+                descuentoCantidadRate = 0.18;
+                descuentoCantidadLabel = "6 plataformas";
+            } else if (distinctPlatformsCantidad === 5) {
+                descuentoCantidadRate = 0.15;
+                descuentoCantidadLabel = "5 plataformas";
+            } else if (distinctPlatformsCantidad === 4) {
+                descuentoCantidadRate = 0.12;
+                descuentoCantidadLabel = "4 plataformas";
+            } else if (distinctPlatformsCantidad === 3) {
+                descuentoCantidadRate = 0.10;
+                descuentoCantidadLabel = "3 plataformas";
             }
 
-            let grandTotal = subtotalSinDescuento - descuentoGlobal;
+            const aplicaDescuentoCantidad = descuentoCantidadRate > 0 && totalProfilesCantidad >= 3;
+            const descuentoCantidad = aplicaDescuentoCantidad ? subtotalCantidad * descuentoCantidadRate : 0;
 
+            // ===== DESCUENTO POR TIEMPO (solo items de 3 meses) =====
+            let subtotalTiempo = 0;
+            itemsTiempo.forEach((item) => {
+                subtotalTiempo += item.pricePerProfile * item.quantity * item.durationMonths;
+            });
+
+            const descuentoTiempo = subtotalTiempo * 0.10; // 10% por 3 meses
+            const aplicaDescuentoTiempo = itemsTiempo.length > 0;
+
+            // ===== TOTALES =====
+            const subtotalSinDescuento = subtotalCantidad + subtotalTiempo;
+            const descuentoTotal = descuentoCantidad + descuentoTiempo;
+            const grandTotal = subtotalSinDescuento - descuentoTotal;
+
+            // ===== RENDERIZAR ITEMS =====
             currentCart.forEach((item, idx) => {
                 const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
                 let itemDisplayTotal = itemSubtotalOriginal;
                 let itemDisplayDiscount = 0;
+                let itemDiscountLabels = [];
 
-                if (profileDiscountApplicable) {
-                    const proporcion = itemSubtotalOriginal / subtotalSinDescuento;
-                    itemDisplayDiscount = descuentoGlobal * proporcion;
+                if (item.durationMonths === 1 && aplicaDescuentoCantidad) {
+                    // Este item pertenece a la categoría cantidad
+                    const proporcion = itemSubtotalOriginal / subtotalCantidad;
+                    itemDisplayDiscount = descuentoCantidad * proporcion;
                     itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
-                    item.discount = itemDisplayDiscount;
-                    item.total = itemDisplayTotal;
-                    item.discountType = "3 plataformas";
-                } else if (item.durationMonths === 3 && hasThreeMonthsDiscount) {
-                    itemDisplayDiscount = itemSubtotalOriginal * 0.12;
+                    itemDiscountLabels.push(`${descuentoCantidadLabel} (-${Math.round(descuentoCantidadRate * 100)}%)`);
+                } else if (item.durationMonths === 3 && aplicaDescuentoTiempo) {
+                    // Este item pertenece a la categoría tiempo
+                    const proporcion = itemSubtotalOriginal / subtotalTiempo;
+                    itemDisplayDiscount = descuentoTiempo * proporcion;
                     itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
-                    item.discount = itemDisplayDiscount;
-                    item.total = itemDisplayTotal;
-                    item.discountType = "3 meses";
-                } else {
-                    item.discount = 0;
-                    item.total = itemSubtotalOriginal;
-                    item.discountType = "";
+                    itemDiscountLabels.push("3 meses (-10%)");
                 }
+
+                item.discount = itemDisplayDiscount;
+                item.total = itemDisplayTotal;
+                item.discountType = itemDiscountLabels.join(", ");
 
                 html += `
                 <div class="summary-row">
@@ -2862,15 +2886,30 @@
             `;
             });
 
-            if (descuentoGlobal > 0) {
+            // ===== MOSTRAR DESCUENTOS POR CATEGORÍA =====
+            if (descuentoCantidad > 0) {
                 html += `
                 <div class="summary-row" style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
                     <div>
-                        <strong style="color: var(--success);">🎉 Descuento por ${discountType}</strong>
-                        <br><small style="color: var(--text-secondary);">${discountExplanation}</small>
+                        <strong style="color: var(--success);">🎉 Descuento por Cantidad (${descuentoCantidadLabel})</strong>
+                        <br><small style="color: var(--text-secondary);">${distinctPlatformsCantidad} plataformas de 1 mes, ${totalProfilesCantidad} perfiles totales</small>
                     </div>
                     <div style="font-weight: 700; color: var(--success); font-size: 18px;">
-                        -$${descuentoGlobal.toFixed(2)}
+                        -$${descuentoCantidad.toFixed(2)}
+                    </div>
+                </div>
+            `;
+            }
+
+            if (descuentoTiempo > 0) {
+                html += `
+                <div class="summary-row" style="background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                    <div>
+                        <strong style="color: var(--warning);">⏰ Descuento por Tiempo (3 meses)</strong>
+                        <br><small style="color: var(--text-secondary);">Contratación de 3 meses en ${itemsTiempo.length} plataforma(s)</small>
+                    </div>
+                    <div style="font-weight: 700; color: var(--warning); font-size: 18px;">
+                        -$${descuentoTiempo.toFixed(2)}
                     </div>
                 </div>
             `;
@@ -3380,7 +3419,7 @@
                         <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
                         <select class="edit-duration-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="updateEditPriceSummary();">
                             <option value="1">1 Mes</option>
-                            <option value="3">3 Meses (-12%)</option>
+                            <option value="3">3 Meses (-10%)</option>
                         </select>
                     </div>
                     <div style="flex: 1;">
@@ -3424,7 +3463,7 @@
 
             if (durationMonths === 3) {
                 subtotal = subtotal * 3;
-                discount = subtotal * 0.12;
+                discount = subtotal * 0.10;
                 discountType = "3 meses";
             }
 
@@ -3464,64 +3503,77 @@
             summary.style.display = "block";
             let html = "";
 
-            let subtotalSinDescuento = 0;
-            editCurrentCart.forEach((item) => {
-                const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
-                subtotalSinDescuento += itemSubtotalOriginal;
+            // ===== SEPARAR POR CATEGORÍA =====
+            const itemsCantidad = editCurrentCart.filter(item => item.durationMonths === 1);
+            const itemsTiempo = editCurrentCart.filter(item => item.durationMonths === 3);
+
+            // ===== DESCUENTO POR CANTIDAD (solo items de 1 mes) =====
+            let subtotalCantidad = 0;
+            itemsCantidad.forEach((item) => {
+                subtotalCantidad += item.pricePerProfile * item.quantity * item.durationMonths;
             });
 
-            let hasThreeMonths = editCurrentCart.some((i) => i.durationMonths === 3);
-            let distinctPlatforms = new Set(editCurrentCart.map((i) => i.platform)).size;
-            let totalProfiles = editCurrentCart.reduce((sum, i) => sum + i.quantity, 0);
-            let hasThreeProfiles = totalProfiles >= 3;
+            const distinctPlatformsCantidad = new Set(itemsCantidad.map((i) => i.platform)).size;
+            const totalProfilesCantidad = itemsCantidad.reduce((sum, i) => sum + i.quantity, 0);
 
-            let profileDiscountApplicable = distinctPlatforms >= 3 && hasThreeProfiles && !hasThreeMonths;
-            let hasThreeMonthsDiscount = hasThreeMonths && !profileDiscountApplicable;
-
-            let descuentoGlobal = 0;
-            let discountType = "";
-            let discountExplanation = "";
-
-            if (profileDiscountApplicable) {
-                descuentoGlobal = subtotalSinDescuento * 0.12;
-                discountType = "3 plataformas";
-                discountExplanation = `${distinctPlatforms} plataformas diferentes, ${totalProfiles} perfiles totales (-12%)`;
-            } else if (hasThreeMonthsDiscount) {
-                editCurrentCart.forEach((item) => {
-                    if (item.durationMonths === 3) {
-                        const itemSubtotalOriginal = item.pricePerProfile * item.quantity * 3;
-                        descuentoGlobal += itemSubtotalOriginal * 0.12;
-                    }
-                });
-                discountType = "3 meses";
-                discountExplanation = `Contratación de 3 meses en una o más plataformas (-12%)`;
+            let descuentoCantidadRate = 0;
+            let descuentoCantidadLabel = "";
+            if (distinctPlatformsCantidad >= 7) {
+                descuentoCantidadRate = 0.20;
+                descuentoCantidadLabel = "7+ plataformas";
+            } else if (distinctPlatformsCantidad === 6) {
+                descuentoCantidadRate = 0.18;
+                descuentoCantidadLabel = "6 plataformas";
+            } else if (distinctPlatformsCantidad === 5) {
+                descuentoCantidadRate = 0.15;
+                descuentoCantidadLabel = "5 plataformas";
+            } else if (distinctPlatformsCantidad === 4) {
+                descuentoCantidadRate = 0.12;
+                descuentoCantidadLabel = "4 plataformas";
+            } else if (distinctPlatformsCantidad === 3) {
+                descuentoCantidadRate = 0.10;
+                descuentoCantidadLabel = "3 plataformas";
             }
 
-            let grandTotal = subtotalSinDescuento - descuentoGlobal;
+            const aplicaDescuentoCantidad = descuentoCantidadRate > 0 && totalProfilesCantidad >= 3;
+            const descuentoCantidad = aplicaDescuentoCantidad ? subtotalCantidad * descuentoCantidadRate : 0;
 
+            // ===== DESCUENTO POR TIEMPO (solo items de 3 meses) =====
+            let subtotalTiempo = 0;
+            itemsTiempo.forEach((item) => {
+                subtotalTiempo += item.pricePerProfile * item.quantity * item.durationMonths;
+            });
+
+            const descuentoTiempo = subtotalTiempo * 0.10;
+            const aplicaDescuentoTiempo = itemsTiempo.length > 0;
+
+            // ===== TOTALES =====
+            const subtotalSinDescuento = subtotalCantidad + subtotalTiempo;
+            const descuentoTotal = descuentoCantidad + descuentoTiempo;
+            const grandTotal = subtotalSinDescuento - descuentoTotal;
+
+            // ===== RENDERIZAR ITEMS =====
             editCurrentCart.forEach((item, idx) => {
                 const itemSubtotalOriginal = item.pricePerProfile * item.quantity * item.durationMonths;
                 let itemDisplayTotal = itemSubtotalOriginal;
                 let itemDisplayDiscount = 0;
+                let itemDiscountLabels = [];
 
-                if (profileDiscountApplicable) {
-                    const proporcion = itemSubtotalOriginal / subtotalSinDescuento;
-                    itemDisplayDiscount = descuentoGlobal * proporcion;
+                if (item.durationMonths === 1 && aplicaDescuentoCantidad) {
+                    const proporcion = itemSubtotalOriginal / subtotalCantidad;
+                    itemDisplayDiscount = descuentoCantidad * proporcion;
                     itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
-                    item.discount = itemDisplayDiscount;
-                    item.total = itemDisplayTotal;
-                    item.discountType = "3 plataformas";
-                } else if (item.durationMonths === 3 && hasThreeMonthsDiscount) {
-                    itemDisplayDiscount = itemSubtotalOriginal * 0.12;
+                    itemDiscountLabels.push(`${descuentoCantidadLabel} (-${Math.round(descuentoCantidadRate * 100)}%)`);
+                } else if (item.durationMonths === 3 && aplicaDescuentoTiempo) {
+                    const proporcion = itemSubtotalOriginal / subtotalTiempo;
+                    itemDisplayDiscount = descuentoTiempo * proporcion;
                     itemDisplayTotal = itemSubtotalOriginal - itemDisplayDiscount;
-                    item.discount = itemDisplayDiscount;
-                    item.total = itemDisplayTotal;
-                    item.discountType = "3 meses";
-                } else {
-                    item.discount = 0;
-                    item.total = itemSubtotalOriginal;
-                    item.discountType = "";
+                    itemDiscountLabels.push("3 meses (-10%)");
                 }
+
+                item.discount = itemDisplayDiscount;
+                item.total = itemDisplayTotal;
+                item.discountType = itemDiscountLabels.join(", ");
 
                 html += `
                 <div class="summary-row">
@@ -3540,15 +3592,30 @@
             `;
             });
 
-            if (descuentoGlobal > 0) {
+            // ===== MOSTRAR DESCUENTOS POR CATEGORÍA =====
+            if (descuentoCantidad > 0) {
                 html += `
                 <div class="summary-row" style="background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
                     <div>
-                        <strong style="color: var(--success);">🎉 Descuento por ${discountType}</strong>
-                        <br><small style="color: var(--text-secondary);">${discountExplanation}</small>
+                        <strong style="color: var(--success);">🎉 Descuento por Cantidad (${descuentoCantidadLabel})</strong>
+                        <br><small style="color: var(--text-secondary);">${distinctPlatformsCantidad} plataformas de 1 mes, ${totalProfilesCantidad} perfiles totales</small>
                     </div>
                     <div style="font-weight: 700; color: var(--success); font-size: 18px;">
-                        -$${descuentoGlobal.toFixed(2)}
+                        -$${descuentoCantidad.toFixed(2)}
+                    </div>
+                </div>
+            `;
+            }
+
+            if (descuentoTiempo > 0) {
+                html += `
+                <div class="summary-row" style="background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 8px; margin: 10px 0;">
+                    <div>
+                        <strong style="color: var(--warning);">⏰ Descuento por Tiempo (3 meses)</strong>
+                        <br><small style="color: var(--text-secondary);">Contratación de 3 meses en ${itemsTiempo.length} plataforma(s)</small>
+                    </div>
+                    <div style="font-weight: 700; color: var(--warning); font-size: 18px;">
+                        -$${descuentoTiempo.toFixed(2)}
                     </div>
                 </div>
             `;
@@ -3897,37 +3964,64 @@
                 if (account) info.price = account.pricePerProfile;
             });
 
+            // ===== SEPARAR POR CATEGORÍA =====
+            // En renovación, todos los items tienen la misma duración (months)
+            // Si months === 3 → descuento por TIEMPO
+            // Si months === 1 → posible descuento por CANTIDAD
+
             let subtotal = 0;
             Object.values(platformCounts).forEach((info) => {
                 subtotal += info.price * info.count * months;
             });
 
-            let discount = 0;
-            let discountText = "";
-
-            const hasThreeMonths = months === 3;
             const distinctPlatforms = Object.keys(platformCounts).length;
             const totalProfiles = Object.values(platformCounts).reduce((sum, info) => sum + info.count, 0);
-            const hasThreePlatforms = distinctPlatforms >= 3 && totalProfiles >= 3;
 
-            if (hasThreeMonths || hasThreePlatforms) {
-                discount = subtotal * 0.12;
-                if (hasThreeMonths && hasThreePlatforms) {
-                    discountText = " (12% OFF por 3 meses y 3+ plataformas)";
-                } else if (hasThreeMonths) {
-                    discountText = " (12% OFF por 3 meses)";
-                } else {
-                    discountText = ` (12% OFF por ${distinctPlatforms} plataformas)`;
+            let discount = 0;
+            let discountText = "";
+            let discountDetails = [];
+
+            if (months === 3) {
+                // Solo aplica descuento por TIEMPO
+                discount = subtotal * 0.10;
+                discountText = " (10% OFF por 3 meses)";
+                discountDetails.push({ label: "Descuento por Tiempo (3 meses)", amount: discount, color: "var(--warning)" });
+            } else if (months === 1) {
+                // Solo aplica descuento por CANTIDAD
+                let platformDiscountRate = 0;
+                let platformDiscountLabel = "";
+                if (distinctPlatforms >= 7) {
+                    platformDiscountRate = 0.20;
+                    platformDiscountLabel = "7+ plataformas";
+                } else if (distinctPlatforms === 6) {
+                    platformDiscountRate = 0.18;
+                    platformDiscountLabel = "6 plataformas";
+                } else if (distinctPlatforms === 5) {
+                    platformDiscountRate = 0.15;
+                    platformDiscountLabel = "5 plataformas";
+                } else if (distinctPlatforms === 4) {
+                    platformDiscountRate = 0.12;
+                    platformDiscountLabel = "4 plataformas";
+                } else if (distinctPlatforms === 3) {
+                    platformDiscountRate = 0.10;
+                    platformDiscountLabel = "3 plataformas";
+                }
+
+                if (platformDiscountRate > 0 && totalProfiles >= 3) {
+                    discount = subtotal * platformDiscountRate;
+                    discountText = ` (${Math.round(platformDiscountRate * 100)}% OFF por ${platformDiscountLabel})`;
+                    discountDetails.push({ label: `Descuento por Cantidad (${platformDiscountLabel})`, amount: discount, color: "var(--success)" });
                 }
             }
+            // Si months === 2, no hay descuento
 
             const total = subtotal - discount;
             renewalCostPreview = total;
 
-            updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText);
+            updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails);
         }
 
-        function updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText) {
+        function updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails) {
             const client = appData.clients.find((c) => c.pin === currentRenewPin);
             if (!client) return;
 
@@ -3937,6 +4031,25 @@
 
             const summary = document.getElementById("renewalSummary");
             summary.style.display = "block";
+
+            let discountHtml = "";
+            if (discountDetails && discountDetails.length > 0) {
+                discountDetails.forEach((d) => {
+                    discountHtml += `
+                    <div class="detail-row" style="color: ${d.color}">
+                        <span class="detail-label">${d.label}:</span>
+                        <span class="detail-value">-$${d.amount.toFixed(2)}</span>
+                    </div>
+                    `;
+                });
+            } else if (discount > 0) {
+                discountHtml = `
+                <div class="detail-row" style="color: var(--success)">
+                    <span class="detail-label">Descuento:</span>
+                    <span class="detail-value">-$${discount.toFixed(2)}</span>
+                </div>
+                `;
+            }
 
             summary.innerHTML = `
             <h4 style="margin-bottom: 15px; color: var(--accent-primary)">
@@ -3950,12 +4063,7 @@
                 <span class="detail-label">Subtotal:</span>
                 <span class="detail-value">$${subtotal.toFixed(2)}</span>
             </div>
-            ${discount > 0 ? `
-            <div class="detail-row" style="color: var(--success)">
-                <span class="detail-label">Descuento (12%):</span>
-                <span class="detail-value">-$${discount.toFixed(2)}</span>
-            </div>
-            ` : ""}
+            ${discountHtml}
             <div class="detail-row" style="border-top: 2px solid var(--accent-primary); padding-top: 10px; margin-top: 10px;">
                 <span class="detail-label" style="font-size: 16px; font-weight: 700;">TOTAL A COBRAR:</span>
                 <span class="detail-value" style="font-size: 24px; font-weight: 800; color: var(--accent-danger);">
@@ -4015,21 +4123,46 @@
 
             const distinctPlatforms = Object.keys(platformCounts).length;
             const totalProfiles = Object.values(platformCounts).reduce((sum, info) => sum + info.count, 0);
-            const hasThreePlatforms = distinctPlatforms >= 3 && totalProfiles >= 3;
-            const hasThreeMonths = months === 3;
 
+            // ===== LÓGICA DE DESCUENTOS SEPARADA POR CATEGORÍA =====
             let discount = 0;
-            if (hasThreeMonths || hasThreePlatforms) {
-                discount = subtotal * 0.12;
+            let discountDetails = [];
+
+            if (months === 3) {
+                // Solo descuento por TIEMPO
+                discount = subtotal * 0.10;
+                discountDetails.push("10% por 3 meses");
+            } else if (months === 1) {
+                // Solo descuento por CANTIDAD
+                let platformDiscountRate = 0;
+                if (distinctPlatforms >= 7) platformDiscountRate = 0.20;
+                else if (distinctPlatforms === 6) platformDiscountRate = 0.18;
+                else if (distinctPlatforms === 5) platformDiscountRate = 0.15;
+                else if (distinctPlatforms === 4) platformDiscountRate = 0.12;
+                else if (distinctPlatforms === 3) platformDiscountRate = 0.10;
+
+                if (platformDiscountRate > 0 && totalProfiles >= 3) {
+                    discount = subtotal * platformDiscountRate;
+                    discountDetails.push(`${Math.round(platformDiscountRate * 100)}% por ${distinctPlatforms} plataformas`);
+                }
             }
+            // months === 2: sin descuento
 
             let renewalCost = subtotal - discount;
 
-            const confirmMessage = `¿Confirmar renovación?\n\n` +
-                `Cliente: ${client.name}\n` +
-                `Duración: ${months} mes(es)\n` +
-                (discount > 0 ? `Subtotal: $${subtotal.toFixed(2)}\nDescuento (12%): -$${discount.toFixed(2)}\n` : ``) +
-                `Monto a cobrar: $${renewalCost.toFixed(2)}\n\n` +
+            const confirmMessage = `¿Confirmar renovación?
+
+` +
+                `Cliente: ${client.name}
+` +
+                `Duración: ${months} mes(es)
+` +
+                (discount > 0 ? `Subtotal: $${subtotal.toFixed(2)}
+Descuento: -$${discount.toFixed(2)} (${discountDetails.join(", ")})
+` : ``) +
+                `Monto a cobrar: $${renewalCost.toFixed(2)}
+
+` +
                 `¿Proceder?`;
 
             if (!confirm(confirmMessage)) return;
@@ -4054,13 +4187,13 @@
                 closeModal('renewClientModal');
                 updateAllViews();
                 showNotification(
-                    `✅ Suscripción renovada\n💰 Cobrado: $${renewalCost.toFixed(2)}\n📅 Nueva fecha: ${formatDate(newEnd)}`,
+                    `✅ Suscripción renovada
+💰 Cobrado: $${renewalCost.toFixed(2)}
+📅 Nueva fecha: ${formatDate(newEnd)}`,
                     "success"
                 );
             });
-        }
-
-        function showNotification(message, type) {
+        }function showNotification(message, type) {
             const notification = document.createElement("div");
             notification.style.cssText = `
             position: fixed;
