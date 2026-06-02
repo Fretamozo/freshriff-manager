@@ -1587,19 +1587,16 @@
                     </button>
                 </div>
                 <form id="accountForm">
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
                         <label class="field-label-required">Plataforma</label>
-                        <select id="accPlatform" required onchange="handlePlatformChange()">
-                            <option value="">Selecciona una plataforma...</option>
-                            <option value="Netflix">Netflix</option>
-                            <option value="Disney+">Disney+</option>
-                            <option value="Prime Video">Prime Video</option>
-                            <option value="HBO Max">HBO Max</option>
-                            <option value="YouTube Premium">YouTube Premium</option>
-                            <option value="Universal+">Universal+</option>
-                            <option value="Crunchyroll">Crunchyroll</option>
-                            <option value="Apple TV+">Apple TV+</option>
-                        </select>
+                        <input type="text" id="accPlatform" required placeholder="Escribe el nombre de la plataforma..." 
+                               oninput="renderPlatformSuggestions('accPlatform', 'platformSuggestions')" 
+                               onfocus="renderPlatformSuggestions('accPlatform', 'platformSuggestions')"
+                               onchange="handlePlatformChange()"
+                               autocomplete="off"
+                               style="width: 100%; padding: 12px 16px; background: var(--bg-secondary); border: 2px solid rgba(59, 130, 246, 0.3); color: var(--text-primary); border-radius: 10px; font-size: 15px;" />
+                        <div id="platformSuggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-card); border: 2px solid rgba(59,130,246,0.3); border-radius: 10px; margin-top: 5px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></div>
+                        <small style="color: var(--text-secondary); display: block; margin-top: 5px;">💡 Escribe el nombre o selecciona de la lista. Si es nueva, se registrará automáticamente.</small>
                     </div>
 
                     <div class="form-group" id="deviceTypeContainer" style="
@@ -2083,7 +2080,7 @@
         };
 
         // Variables globales
-        let appData = { accounts: [], clients: [], payments: [] };
+        let appData = { accounts: [], clients: [], payments: [], platforms: {} };
         let currentSort = "asc";
         let currentCart = [];
         let editCurrentCart = [];
@@ -2097,21 +2094,171 @@
         let isDataLoaded = false;
         let unsubscribe = null;
 
+        // ========== GESTIÓN DE PLATAFORMAS DINÁMICAS ==========
+
+        function getPlatformConfig(platformName) {
+            // Primero buscar en config guardada, luego en defaults, luego generar
+            if (appData.platforms && appData.platforms[platformName]) {
+                return appData.platforms[platformName];
+            }
+            if (DEFAULT_getPlatformConfig(platformName)) {
+                return DEFAULT_getPlatformConfig(platformName);
+            }
+            return generatePlatformConfig(platformName);
+        }
+
+        function generatePlatformConfig(platformName) {
+            // Generar config única basada en el nombre
+            let hash = 0;
+            for (let i = 0; i < platformName.length; i++) {
+                hash = ((hash << 5) - hash) + platformName.charCodeAt(i);
+                hash = hash & hash;
+            }
+            const colorIndex = Math.abs(hash) % COLOR_PALETTE.length;
+            const iconIndex = Math.abs(hash >> 4) % ICON_PALETTE.length;
+
+            return {
+                icon: ICON_PALETTE[iconIndex],
+                color: COLOR_PALETTE[colorIndex],
+                hasSubtypes: false,
+                profiles: 4
+            };
+        }
+
+        function ensurePlatformRegistered(platformName) {
+            if (!appData.platforms) appData.platforms = {};
+            if (!appData.platforms[platformName]) {
+                appData.platforms[platformName] = getPlatformConfig(platformName);
+            }
+            return appData.platforms[platformName];
+        }
+
+        function getAllPlatformNames() {
+            const fromAccounts = [...new Set(appData.accounts.map(a => a.platform))];
+            const fromConfig = Object.keys(appData.platforms || {});
+            const fromDefaults = Object.keys(DEFAULT_PLATFORM_CONFIG);
+            return [...new Set([...fromAccounts, ...fromConfig, ...fromDefaults])].sort();
+        }
+
+        function buildDynamicStyles() {
+            // Generar estilos CSS dinámicos para todas las plataformas conocidas
+            let styles = document.getElementById('dynamicPlatformStyles');
+            if (!styles) {
+                styles = document.createElement('style');
+                styles.id = 'dynamicPlatformStyles';
+                document.head.appendChild(styles);
+            }
+
+            let css = '';
+            const allPlatforms = getAllPlatformNames();
+
+            allPlatforms.forEach(name => {
+                const config = getPlatformConfig(name);
+                const safeClass = 'plat-' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                css += `.${safeClass} { background: linear-gradient(135deg, ${config.color}, ${adjustColor(config.color, -30)}); }
+`;
+            });
+
+            styles.textContent = css;
+        }
+
+        function adjustColor(hex, amount) {
+            // Oscurecer/aclarar un color hex
+            let usePound = false;
+            if (hex[0] === "#") { hex = hex.slice(1); usePound = true; }
+            let num = parseInt(hex, 16);
+            let r = (num >> 16) + amount;
+            let g = ((num >> 8) & 0x00FF) + amount;
+            let b = (num & 0x00FF) + amount;
+            if (r > 255) r = 255; else if (r < 0) r = 0;
+            if (g > 255) g = 255; else if (g < 0) g = 0;
+            if (b > 255) b = 255; else if (b < 0) b = 0;
+            return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16).padStart(6, '0');
+        }
+
+        function getPlatformClass(platformName) {
+            return 'plat-' + platformName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        function renderPlatformSuggestions(inputId, suggestionsId) {
+            const input = document.getElementById(inputId);
+            const suggestions = document.getElementById(suggestionsId);
+            if (!input || !suggestions) return;
+
+            const value = input.value.toLowerCase().trim();
+            if (value.length < 1) {
+                suggestions.style.display = 'none';
+                return;
+            }
+
+            const allNames = getAllPlatformNames();
+            const matches = allNames.filter(name => name.toLowerCase().includes(value));
+
+            if (matches.length === 0) {
+                suggestions.style.display = 'none';
+                return;
+            }
+
+            suggestions.innerHTML = '';
+            matches.forEach(name => {
+                const config = getPlatformConfig(name);
+                const div = document.createElement('div');
+                div.style.cssText = 'padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(59,130,246,0.1); transition: all 0.2s;';
+                div.innerHTML = `<span style="font-size: 20px;">${config.icon}</span><span style="font-weight: 600;">${name}</span>`;
+                div.onmouseenter = () => div.style.background = 'rgba(59,130,246,0.1)';
+                div.onmouseleave = () => div.style.background = 'transparent';
+                div.onclick = () => {
+                    input.value = name;
+                    suggestions.style.display = 'none';
+                    handlePlatformChange();
+                };
+                suggestions.appendChild(div);
+            });
+
+            suggestions.style.display = 'block';
+        }
+
+        // Cerrar sugerencias al hacer click fuera
+        document.addEventListener('click', (e) => {
+            const suggestions = document.getElementById('platformSuggestions');
+            const input = document.getElementById('accPlatform');
+            if (suggestions && input && !suggestions.contains(e.target) && e.target !== input) {
+                suggestions.style.display = 'none';
+            }
+        });
+
         const MONTH_NAMES = [
             "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ];
 
-        const PLATFORM_CONFIG = {
-            Netflix: { icon: "🎬", color: "netflix", hasSubtypes: true, subtypes: { "Smart TV": { profiles: 3 }, "Móvil/PC": { profiles: 4 } } },
-            "Disney+": { icon: "✨", color: "disney", hasSubtypes: false, profiles: 7 },
-            "Prime Video": { icon: "📦", color: "prime", hasSubtypes: false, profiles: 6 },
-            "HBO Max": { icon: "🎭", color: "hbo", hasSubtypes: false, profiles: 5 },
-            "YouTube Premium": { icon: "▶️", color: "youtube", hasSubtypes: false, profiles: 5 },
-            "Universal+": { icon: "🌍", color: "universal", hasSubtypes: false, profiles: 4 },
-            "Crunchyroll": { icon: "🍥", color: "crunchyroll", hasSubtypes: false, profiles: 4 },
-            "Apple TV+": { icon: "🍎", color: "appletv", hasSubtypes: false, profiles: 5 },
+        // Configuración por defecto para plataformas conocidas
+        const DEFAULT_PLATFORM_CONFIG = {
+            "Netflix": { icon: "🎬", color: "#e50914", hasSubtypes: true, subtypes: { "Smart TV": { profiles: 3 }, "Móvil/PC": { profiles: 4 } } },
+            "Disney+": { icon: "✨", color: "#113ccf", hasSubtypes: false, profiles: 7 },
+            "Prime Video": { icon: "📦", color: "#00a8e1", hasSubtypes: false, profiles: 6 },
+            "HBO Max": { icon: "🎭", color: "#9900ff", hasSubtypes: false, profiles: 5 },
+            "YouTube Premium": { icon: "▶️", color: "#ff0000", hasSubtypes: false, profiles: 5 },
+            "Universal+": { icon: "🌍", color: "#e60000", hasSubtypes: false, profiles: 4 },
+            "Crunchyroll": { icon: "🍥", color: "#f47521", hasSubtypes: false, profiles: 4 },
+            "Apple TV+": { icon: "🍎", color: "#1d1d1f", hasSubtypes: false, profiles: 5 },
+            "Paramount+": { icon: "⭐", color: "#0064ff", hasSubtypes: false, profiles: 4 },
         };
+
+        // Paleta de colores para plataformas nuevas (se asignan cíclicamente)
+        const COLOR_PALETTE = [
+            "#e50914", "#113ccf", "#00a8e1", "#9900ff", "#ff0000",
+            "#f47521", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6",
+            "#06b6d4", "#84cc16", "#f43f5e", "#6366f1", "#14b8a6"
+        ];
+
+        const ICON_PALETTE = [
+            "📺", "🎬", "✨", "📦", "🎭", "▶️", "🌍", "🍥", "🍎", "⭐",
+            "🔥", "💎", "🚀", "🎯", "🎪", "🎨", "🎵", "📱", "💻", "🎮"
+        ];
+
+        // PLATFORM_CONFIG se carga dinámicamente desde appData.platforms
+        let PLATFORM_CONFIG = {};
 
         // 🔥 GUARDAR en Firebase
         function saveData() {
@@ -2119,6 +2266,7 @@
                 accounts: appData.accounts,
                 clients: appData.clients,
                 payments: appData.payments,
+                platforms: appData.platforms || {},
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             }).then(() => {
                 console.log("✅ Guardado en Firebase");
@@ -2138,7 +2286,8 @@
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
-                        payments: data.payments || []
+                        payments: data.payments || [],
+                        platforms: data.platforms || {}
                     };
                     console.log("✅ Cargado desde Firebase");
                 } else {
@@ -2146,11 +2295,18 @@
                     const saved = localStorage.getItem("freshRiffData");
                     if (saved) {
                         appData = JSON.parse(saved);
+                    if (!appData.platforms) appData.platforms = {};
                         // Guardar en Firebase para futuro
                         return saveData();
                     }
                 }
                 isDataLoaded = true;
+                // Sincronizar PLATFORM_CONFIG con datos cargados
+                PLATFORM_CONFIG = {};
+                const allPlatforms = getAllPlatformNames();
+                allPlatforms.forEach(name => {
+                    getPlatformConfig(name) = getPlatformConfig(name);
+                });
                 updateAllViews();
             }).catch((error) => {
                 console.error("❌ Error cargando:", error);
@@ -2158,6 +2314,12 @@
                 const saved = localStorage.getItem("freshRiffData");
                 if (saved) {
                     appData = JSON.parse(saved);
+                    if (!appData.platforms) appData.platforms = {};
+                    PLATFORM_CONFIG = {};
+                    const allPlatforms2 = getAllPlatformNames();
+                    allPlatforms2.forEach(name => {
+                        getPlatformConfig(name) = getPlatformConfig(name);
+                    });
                     updateAllViews();
                 }
             });
@@ -2171,7 +2333,8 @@
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
-                        payments: data.payments || []
+                        payments: data.payments || [],
+                        platforms: data.platforms || {}
                     };
                     // Solo actualizar si no hay modal abierto
                     if (!document.querySelector('.modal.active')) {
@@ -2391,11 +2554,19 @@
         }
 
         function handlePlatformChange() {
-            const platform = document.getElementById("accPlatform").value;
+            const platformInput = document.getElementById("accPlatform");
+            const platform = platformInput ? platformInput.value.trim() : "";
             const deviceContainer = document.getElementById("deviceTypeContainer");
             const deviceSelect = document.getElementById("accDeviceType");
 
-            if (platform === "Netflix") {
+            // Registrar la plataforma si es nueva
+            if (platform) {
+                ensurePlatformRegistered(platform);
+            }
+
+            const config = getPlatformConfig(platform);
+
+            if (config && config.hasSubtypes) {
                 if (deviceContainer) deviceContainer.style.display = "block";
                 if (deviceSelect) deviceSelect.required = true;
             } else {
@@ -2418,7 +2589,16 @@
         // ========== CUENTAS ==========
         document.getElementById("accountForm").addEventListener("submit", function (e) {
             e.preventDefault();
-            const platform = document.getElementById("accPlatform").value;
+            const platform = document.getElementById("accPlatform").value.trim();
+
+            if (!platform) {
+                alert("⚠️ Debes escribir el nombre de la plataforma");
+                return;
+            }
+
+            // Registrar plataforma si es nueva
+            ensurePlatformRegistered(platform);
+
             let deviceType = "Todos";
             let maxProfiles;
 
@@ -2428,9 +2608,9 @@
                     alert("⚠️ Debes seleccionar el tipo de dispositivo para Netflix");
                     return;
                 }
-                maxProfiles = PLATFORM_CONFIG[platform].subtypes[deviceType].profiles;
+                maxProfiles = getPlatformConfig(platform).subtypes[deviceType].profiles;
             } else {
-                maxProfiles = PLATFORM_CONFIG[platform].profiles;
+                maxProfiles = getPlatformConfig(platform).profiles;
             }
 
             const newAccount = {
@@ -2549,7 +2729,7 @@
 
             appData.accounts.forEach((account) => {
                 const availableProfiles = account.profiles.filter((p) => !p.occupied).length;
-                const config = PLATFORM_CONFIG[account.platform];
+                const config = getPlatformConfig(account.platform);
 
                 const priceEditor = document.createElement("div");
                 priceEditor.style.cssText = "background: var(--bg-secondary); padding: 15px; border-radius: 10px; border: 1px solid rgba(59, 130, 246, 0.2);";
@@ -2590,7 +2770,7 @@
                 card.innerHTML = `
                 <div class="platform-header">
                     <div class="platform-name">
-                        <div class="platform-icon ${config.color}">${config.icon}</div>
+                        <div class="platform-icon ${getPlatformClass(account.platform)}">${config.icon}</div>
                         <div>
                             ${account.platform}
                             ${account.platform === "Netflix" ? `<div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">${account.deviceType}</div>` : ""}
@@ -2672,7 +2852,7 @@
             Object.entries(grouped).forEach(([key, accounts]) => {
                 const platform = accounts[0].platform;
                 const deviceType = accounts[0].deviceType;
-                const config = PLATFORM_CONFIG[platform];
+                const config = getPlatformConfig(platform);
                 const availableCount = accounts.reduce(
                     (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
                     0,
@@ -2845,7 +3025,7 @@
                 html += `
                 <div class="summary-row">
                     <div>
-                        ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
+                        ${getPlatformConfig(item.platform).icon} <strong>${item.platform}</strong> 
                         ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
                         <br><small style="color: var(--text-secondary);">
                             ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
@@ -2988,7 +3168,7 @@
                 div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
+                        <strong style="font-size: 18px; color: var(--accent-danger);">${getPlatformConfig(ass.platform).icon} ${ass.platform}</strong>
                         ${ass.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${ass.deviceType})</span>` : ""}<br>
                         <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
                     </div>
@@ -3041,7 +3221,7 @@
                 tr.innerHTML = `
                 <td><strong style="font-family: monospace; font-size: 16px; color: var(--accent-danger);">${client.pin}</strong></td>
                 <td><strong>${lastName}</strong>, ${firstName}</td>
-                <td>${platforms.map((p) => PLATFORM_CONFIG[p].icon).join(" ")} (${platforms.length})</td>
+                <td>${platforms.map((p) => getPlatformConfig(p).icon).join(" ")} (${platforms.length})</td>
                 <td>
                     <span class="date-display">${formatDate(Math.max(...client.assignments.map((a) => new Date(a.expiryDate))))}</span><br>
                     <small style="color: ${daysLeft <= 3 ? "var(--accent-danger)" : daysLeft <= 10 ? "var(--warning)" : "var(--success)"};">${daysLeft} días</small>
@@ -3135,7 +3315,7 @@
                 `;
 
                     client.assignments.forEach((ass) => {
-                        const config = PLATFORM_CONFIG[ass.platform];
+                        const config = getPlatformConfig(ass.platform);
                         const assDaysLeft = getDaysRemaining(ass.expiryDate);
                         const isExpired = assDaysLeft <= 0;
 
@@ -3260,7 +3440,7 @@
             client.assignments.forEach((ass, idx) => {
                 const daysLeft = getDaysRemaining(ass.expiryDate);
                 const isExpired = daysLeft <= 0;
-                const config = PLATFORM_CONFIG[ass.platform];
+                const config = getPlatformConfig(ass.platform);
 
                 const div = document.createElement("div");
                 div.className = "client-result";
@@ -3354,7 +3534,7 @@
             Object.entries(grouped).forEach(([key, accounts]) => {
                 const platform = accounts[0].platform;
                 const deviceType = accounts[0].deviceType;
-                const config = PLATFORM_CONFIG[platform];
+                const config = getPlatformConfig(platform);
                 const availableCount = accounts.reduce(
                     (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
                     0,
@@ -3526,7 +3706,7 @@
                 html += `
                 <div class="summary-row">
                     <div>
-                        ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
+                        ${getPlatformConfig(item.platform).icon} <strong>${item.platform}</strong> 
                         ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
                         <br><small style="color: var(--text-secondary);">
                             ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
@@ -3728,7 +3908,7 @@
                 div.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
+                        <strong style="font-size: 18px; color: var(--accent-danger);">${getPlatformConfig(ass.platform).icon} ${ass.platform}</strong>
                         ${ass.platform === "Netflix" ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}<br>
                         <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
                     </div>
@@ -3795,7 +3975,7 @@
             container.innerHTML = "";
 
             client.assignments.forEach((ass) => {
-                const config = PLATFORM_CONFIG[ass.platform];
+                const config = getPlatformConfig(ass.platform);
                 const assDaysLeft = getDaysRemaining(ass.expiryDate);
                 const isExpired = assDaysLeft <= 0;
 
@@ -4187,7 +4367,7 @@
             appData.accounts.forEach((acc) => {
                 const key = acc.platform === "Netflix" ? `Netflix - ${acc.deviceType}` : acc.platform;
                 if (!summary[key]) {
-                    summary[key] = { total: 0, available: 0, icon: PLATFORM_CONFIG[acc.platform].icon, color: PLATFORM_CONFIG[acc.platform].color };
+                    summary[key] = { total: 0, available: 0, icon: getPlatformConfig(acc.platform).icon, color: getPlatformConfig(acc.platform).color };
                 }
                 summary[key].total += acc.maxProfiles;
                 summary[key].available += acc.profiles.filter((p) => !p.occupied).length;
@@ -4199,7 +4379,7 @@
                 card.innerHTML = `
                 <div class="platform-header">
                     <div class="platform-name">
-                        <div class="platform-icon ${data.color}">${data.icon}</div>
+                        <div class="platform-icon ${getPlatformClass(key.split(" - ")[0])}">${data.icon}</div>
                         <div style="font-size: 14px;">${key}</div>
                     </div>
                 </div>
@@ -4273,7 +4453,7 @@
                     const income = platformIncome[platform] || 0;
                     const cost = platformCosts[platform] || 0;
                     const profit = income - cost;
-                    const config = PLATFORM_CONFIG[platform];
+                    const config = getPlatformConfig(platform);
 
                     html += `
                     <div class="finance-card" style="border: 2px solid ${profit >= 0 ? "var(--success)" : "var(--accent-danger)"};">
@@ -4448,6 +4628,7 @@
         });
 
         function updateAllViews() {
+            buildDynamicStyles();
             updateDashboard();
             renderAccounts();
             renderClients();
