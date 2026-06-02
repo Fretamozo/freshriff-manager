@@ -607,6 +607,18 @@
             background: linear-gradient(135deg, #ff0000, #cc0000);
         }
 
+        .universal {
+            background: linear-gradient(135deg, #e60000, #b30000);
+        }
+
+        .crunchyroll {
+            background: linear-gradient(135deg, #f47521, #d45a0f);
+        }
+
+        .appletv {
+            background: linear-gradient(135deg, #1d1d1f, #000000);
+        }
+
         .profile-slots {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -1308,6 +1320,7 @@
             border: 2px dashed var(--accent-danger);
         }
     </style>
+<base target="_blank">
 </head>
 
 <body>
@@ -1583,6 +1596,9 @@
                             <option value="Prime Video">Prime Video</option>
                             <option value="HBO Max">HBO Max</option>
                             <option value="YouTube Premium">YouTube Premium</option>
+                            <option value="Universal+">Universal+</option>
+                            <option value="Crunchyroll">Crunchyroll</option>
+                            <option value="Apple TV+">Apple TV+</option>
                         </select>
                     </div>
 
@@ -2092,6 +2108,9 @@
             "Prime Video": { icon: "📦", color: "prime", hasSubtypes: false, profiles: 6 },
             "HBO Max": { icon: "🎭", color: "hbo", hasSubtypes: false, profiles: 5 },
             "YouTube Premium": { icon: "▶️", color: "youtube", hasSubtypes: false, profiles: 5 },
+            "Universal+": { icon: "🌍", color: "universal", hasSubtypes: false, profiles: 4 },
+            "Crunchyroll": { icon: "🍥", color: "crunchyroll", hasSubtypes: false, profiles: 4 },
+            "Apple TV+": { icon: "🍎", color: "appletv", hasSubtypes: false, profiles: 5 },
         };
 
         // 🔥 GUARDAR en Firebase
