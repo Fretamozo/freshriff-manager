@@ -553,6 +553,15 @@
             box-shadow: 0 10px 30px rgba(239, 68, 68, 0.1);
         }
 
+        .platform-card-grouped {
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .platform-card-grouped:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.12);
+        }
+
         .platform-header {
             display: flex;
             justify-content: space-between;
@@ -615,6 +624,17 @@
             background: linear-gradient(135deg, #0064ff, #0047b3);
         }
 
+        .miotv {
+            background: linear-gradient(135deg, #00b894, #00876b);
+        }
+
+        /* Respaldo para plataformas personalizadas: el color real se aplica inline
+           (ver platformIconHtml en app.js), pero si algún punto del código solo
+           pone esta clase sin el inline, al menos no queda sin fondo. */
+        .custom-platform {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        }
+
         .profile-slots {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -645,6 +665,14 @@
             background: rgba(239, 68, 68, 0.15);
             border-color: var(--accent-danger);
             color: var(--accent-danger);
+        }
+
+        .slot-blocked {
+            background: rgba(148, 163, 184, 0.15);
+            border-color: var(--text-secondary);
+            color: var(--text-secondary);
+            opacity: 0.7;
+            background-image: repeating-linear-gradient(45deg, rgba(148, 163, 184, 0.15), rgba(148, 163, 184, 0.15) 4px, rgba(148, 163, 184, 0.3) 4px, rgba(148, 163, 184, 0.3) 8px);
         }
 
         .data-table {
@@ -888,25 +916,57 @@
             font-size: 12px;
         }
 
-        .sort-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
+        .sort-btn {
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.3);
             color: var(--accent-primary);
-            font-size: 14px;
-            margin-bottom: 15px;
+            border-radius: 6px;
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+            line-height: 1;
             cursor: pointer;
-            padding: 10px 20px;
-            background: rgba(59, 130, 246, 0.1);
-            border-radius: 25px;
-            border: 2px solid var(--accent-primary);
-            font-weight: 600;
-            transition: all 0.3s;
+            margin-left: 4px;
+            padding: 0;
+            vertical-align: middle;
+            transition: all 0.2s;
         }
 
-        .sort-indicator:hover {
+        .sort-btn:hover {
             background: var(--accent-primary);
-            color: white;
+            color: #fff;
+        }
+
+        .sort-btn-active {
+            background: var(--accent-primary);
+            color: #fff;
+            border-color: var(--accent-primary);
+        }
+
+        .platform-filter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-secondary);
+            border-radius: 20px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .platform-filter-btn:hover {
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+        }
+
+        .platform-filter-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: #fff;
         }
 
         .platform-subtype {
@@ -917,6 +977,45 @@
             border-radius: 20px;
             margin-left: 10px;
             border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .renew-item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: var(--bg-secondary);
+            border: 2px solid rgba(59, 130, 246, 0.2);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .renew-item-row:hover {
+            border-color: var(--accent-primary);
+        }
+
+        .renew-item-row.checked {
+            border-color: var(--accent-success);
+            background: rgba(16, 185, 129, 0.08);
+        }
+
+        .renew-item-info {
+            flex: 1;
+        }
+
+        .renew-item-row input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        .renew-item-row input[type="number"] {
+            padding: 6px;
         }
 
         .summary-box {
