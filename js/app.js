@@ -13,15 +13,25 @@
         const db = firebase.firestore();
 
         // Variables globales
-        let appData = { accounts: [], clients: [], payments: [] };
-        let currentSort = "asc";
+        let appData = { accounts: [], clients: [], payments: [], customPlatforms: [], platformLogos: {} };
+        // Orden de la tabla de clientes: campo activo + dirección. Por defecto,
+        // Apellido descendente (tal como pidió Facu).
+        let currentSortField = "lastName";
+        let currentSortDirection = "desc";
+        // Plataformas tildadas en los botones de filtro (vacío = mostrar todos)
+        let activePlatformFilters = new Set();
         let currentCart = [];
         let editCurrentCart = [];
         let editingClientPin = null;
+        // Logo elegido pero todavía no guardado (se resuelve en el submit del form).
+        // En el de editar: "" significa que el usuario tocó "Quitar logo" a propósito.
+        let pendingNewPlatformLogo = null;
+        let pendingEditPlatformLogo = null;
         let selectedMonth = new Date().getMonth();
         let selectedYear = new Date().getFullYear();
         let currentViewPin = null;
         let currentRenewPin = null;
+        let changeExpiryAssignmentIndex = null;
         let selectedRenewalMonths = 1;
         let renewalCostPreview = 0;
         let isDataLoaded = false;
@@ -32,9 +42,9 @@
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ];
 
-        const PLATFORM_CONFIG = {
+        let PLATFORM_CONFIG = {
             Netflix: { icon: "🎬", color: "netflix", hasSubtypes: true, subtypes: { "Smart TV": { profiles: 3 }, "Móvil/PC": { profiles: 4 } } },
-            "Disney+": { icon: "✨", color: "disney", hasSubtypes: false, profiles: 7 },
+            "Disney+": { icon: "✨", color: "disney", hasSubtypes: true, subtypes: { "Smart": { profiles: 2 }, "Común": { profiles: 6 } } },
             "Prime Video": { icon: "📦", color: "prime", hasSubtypes: false, profiles: 6 },
             "HBO Max": { icon: "🎭", color: "hbo", hasSubtypes: false, profiles: 5 },
             "YouTube Premium": { icon: "▶️", color: "youtube", hasSubtypes: false, profiles: 5 },
@@ -44,12 +54,173 @@
             "Paramount+": { icon: "⛰️", color: "paramount", hasSubtypes: false, profiles: 6 },
         };
 
+        // ¿Esta plataforma se vende dividida en subtipos (ej: Netflix Smart TV /
+        // Móvil-PC, Disney+ Smart / Común)? Antes esto se preguntaba comparando
+        // directamente contra el string "Netflix" en decenas de lugares del código;
+        // ahora es genérico, así que cualquier plataforma con hasSubtypes:true en
+        // PLATFORM_CONFIG (de fábrica o futura) queda soportada sin tocar nada más.
+        function platformHasSubtypes(platform) {
+            return !!(PLATFORM_CONFIG[platform] && PLATFORM_CONFIG[platform].hasSubtypes);
+        }
+
+        // Nombres de las plataformas que vienen incluidas de fábrica (no se pueden borrar/editar desde el catálogo)
+        const BUILTIN_PLATFORM_NAMES = Object.keys(PLATFORM_CONFIG);
+
+        // 🧩 Vuelve a armar PLATFORM_CONFIG combinando las plataformas fijas (de fábrica)
+        // con las plataformas personalizadas que Facu agregó desde "🧩 Plataformas".
+        // Se llama cada vez que appData.customPlatforms cambia (alta, edición, borrado,
+        // carga inicial desde Firebase) para que TODO el resto del código (que sigue
+        // leyendo PLATFORM_CONFIG[platform] tal cual como antes) vea también las
+        // plataformas dinámicas sin tener que tocar cada punto de uso.
+        function rebuildPlatformConfig() {
+            const builtins = {};
+            BUILTIN_PLATFORM_NAMES.forEach((name) => {
+                builtins[name] = PLATFORM_CONFIG[name];
+            });
+
+            const merged = { ...builtins };
+            (appData.customPlatforms || []).forEach((cp) => {
+                merged[cp.name] = {
+                    icon: cp.icon || "📺",
+                    color: cp.colorClass || "custom-platform",
+                    hasSubtypes: false,
+                    profiles: cp.profiles,
+                    isCustom: true,
+                    customColorHex: cp.colorHex || "#3b82f6",
+                };
+            });
+            PLATFORM_CONFIG = merged;
+        }
+
+        // 🖼️ Devuelve el logo (imagen) que Facu subió para una plataforma, o null si
+        // todavía no subió ninguno (en ese caso se sigue usando el emoji de siempre).
+        function getPlatformLogo(platformName) {
+            return (appData.platformLogos || {})[platformName] || null;
+        }
+
+        // 🎨 Genera el <div> del ícono de una plataforma (versión grande, 44x44, usada
+        // en los encabezados de tarjeta). Si hay un logo subido lo muestra como imagen;
+        // si no, cae al emoji + color de siempre (de fábrica o del catálogo personalizado).
+        function platformIconHtml(config, platformName) {
+            const logo = platformName ? getPlatformLogo(platformName) : null;
+            if (logo) {
+                return `<div class="platform-icon" style="background: #fff; padding: 5px;"><img src="${logo}" alt="${platformName}" style="width: 100%; height: 100%; object-fit: contain;"></div>`;
+            }
+            if (config && config.isCustom) {
+                const hex = config.customColorHex || "#3b82f6";
+                return `<div class="platform-icon" style="background: linear-gradient(135deg, ${hex}, ${hex}cc);">${config.icon}</div>`;
+            }
+            return `<div class="platform-icon ${config.color}">${config.icon}</div>`;
+        }
+
+        // 🎨 Ícono chico para usar dentro de texto/resúmenes cortos (ej: "🎬 Netflix").
+        // Si hay logo subido, muestra una miniatura; si no, el emoji de siempre.
+        function platformIconInline(platformName, size) {
+            size = size || 18;
+            const logo = getPlatformLogo(platformName);
+            if (logo) {
+                return `<img src="${logo}" alt="${platformName}" style="width: ${size}px; height: ${size}px; object-fit: contain; vertical-align: middle; border-radius: 4px; background: #fff;">`;
+            }
+            const config = PLATFORM_CONFIG[platformName];
+            return config ? config.icon : "📺";
+        }
+
+        // 🖼️ Redimensiona y comprime una imagen de logo antes de guardarla, para que
+        // cada logo pese solo unos KB (Firestore tiene un límite de 1MB por documento y
+        // acá se guardan TODOS los datos de la app juntos). Devuelve un dataURL en PNG,
+        // achicado a como máximo 160x160px manteniendo la proporción.
+        function resizeLogoImage(file) {
+            return new Promise((resolve, reject) => {
+                if (!file.type.startsWith("image/")) {
+                    reject(new Error("El archivo elegido no es una imagen"));
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error("No se pudo leer la imagen"));
+                    img.onload = () => {
+                        const maxSize = 160;
+                        let { width, height } = img;
+                        if (width > height && width > maxSize) {
+                            height = Math.round((height * maxSize) / width);
+                            width = maxSize;
+                        } else if (height > maxSize) {
+                            width = Math.round((width * maxSize) / height);
+                            height = maxSize;
+                        }
+                        const canvas = document.createElement("canvas");
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext("2d");
+                        ctx.clearRect(0, 0, width, height);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL("image/png"));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Cuando eligen un archivo en "🧩 Nueva Plataforma": lo redimensiona, lo muestra
+        // en la vista previa y lo deja listo (en una variable) para guardarlo recién
+        // cuando se confirme el formulario.
+        function handleNewPlatformLogoChange(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+
+            resizeLogoImage(file)
+                .then((dataUrl) => {
+                    pendingNewPlatformLogo = dataUrl;
+                    const preview = document.getElementById("newPlatformLogoPreview");
+                    const wrap = document.getElementById("newPlatformLogoPreviewWrap");
+                    if (preview) preview.src = dataUrl;
+                    if (wrap) wrap.style.display = "block";
+                })
+                .catch((err) => {
+                    alert("⚠️ " + err.message);
+                    input.value = "";
+                });
+        }
+
+        // Igual que la anterior, pero para el formulario de "✏️ Editar Plataforma"
+        function handleEditPlatformLogoChange(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+
+            resizeLogoImage(file)
+                .then((dataUrl) => {
+                    pendingEditPlatformLogo = dataUrl;
+                    const preview = document.getElementById("editPlatformCatalogLogoPreview");
+                    const wrap = document.getElementById("editPlatformCatalogLogoPreviewWrap");
+                    if (preview) preview.src = dataUrl;
+                    if (wrap) wrap.style.display = "flex";
+                })
+                .catch((err) => {
+                    alert("⚠️ " + err.message);
+                    input.value = "";
+                });
+        }
+
+        // Botón "🗑️ Quitar logo" dentro de "Editar Plataforma": vuelve a usar el emoji
+        function removeEditPlatformLogo() {
+            pendingEditPlatformLogo = "";
+            const wrap = document.getElementById("editPlatformCatalogLogoPreviewWrap");
+            const fileInput = document.getElementById("editPlatformCatalogLogoFile");
+            if (wrap) wrap.style.display = "none";
+            if (fileInput) fileInput.value = "";
+        }
+
         // 🔥 GUARDAR en Firebase
         function saveData() {
             return db.collection("appData").doc("main").set({
                 accounts: appData.accounts,
                 clients: appData.clients,
                 payments: appData.payments,
+                customPlatforms: appData.customPlatforms,
+                platformLogos: appData.platformLogos || {},
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
             }).then(() => {
                 console.log("✅ Guardado en Firebase");
@@ -61,6 +232,35 @@
             });
         }
 
+        // 🧩 Detecta plataformas que aparecen en cuentas/clientes guardados pero que no
+        // están ni en las plataformas de fábrica ni en el catálogo personalizado (por
+        // ejemplo, datos de una versión anterior). Las da de alta automáticamente en
+        // el catálogo para que no queden "huérfanas" sin ícono ni configuración.
+        function migrateUnknownPlatforms() {
+            const known = new Set([...BUILTIN_PLATFORM_NAMES, ...(appData.customPlatforms || []).map((cp) => cp.name)]);
+            const found = new Map();
+
+            (appData.accounts || []).forEach((acc) => {
+                if (!known.has(acc.platform) && !found.has(acc.platform)) {
+                    found.set(acc.platform, acc.maxProfiles || 5);
+                }
+            });
+
+            if (found.size === 0) return false;
+
+            found.forEach((profiles, name) => {
+                appData.customPlatforms.push({
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    name,
+                    profiles,
+                    icon: "📺",
+                    colorClass: "custom-platform",
+                    colorHex: "#3b82f6",
+                });
+            });
+            return true;
+        }
+
         // 🔥 CARGAR desde Firebase
         function loadData() {
             return db.collection("appData").doc("main").get().then((doc) => {
@@ -69,14 +269,23 @@
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
-                        payments: data.payments || []
+                        payments: data.payments || [],
+                        customPlatforms: data.customPlatforms || [],
+                        platformLogos: data.platformLogos || {}
                     };
                     console.log("✅ Cargado desde Firebase");
+                    const migrated = migrateUnknownPlatforms();
+                    rebuildPlatformConfig();
+                    if (migrated) saveData();
                 } else {
                     // Intentar cargar desde localStorage como migración
                     const saved = localStorage.getItem("freshRiffData");
                     if (saved) {
                         appData = JSON.parse(saved);
+                        if (!appData.customPlatforms) appData.customPlatforms = [];
+                        if (!appData.platformLogos) appData.platformLogos = {};
+                        migrateUnknownPlatforms();
+                        rebuildPlatformConfig();
                         // Guardar en Firebase para futuro
                         return saveData();
                     }
@@ -89,6 +298,9 @@
                 const saved = localStorage.getItem("freshRiffData");
                 if (saved) {
                     appData = JSON.parse(saved);
+                    if (!appData.customPlatforms) appData.customPlatforms = [];
+                    if (!appData.platformLogos) appData.platformLogos = {};
+                    rebuildPlatformConfig();
                     updateAllViews();
                 }
             });
@@ -102,8 +314,11 @@
                     appData = {
                         accounts: data.accounts || [],
                         clients: data.clients || [],
-                        payments: data.payments || []
+                        payments: data.payments || [],
+                        customPlatforms: data.customPlatforms || [],
+                        platformLogos: data.platformLogos || {}
                     };
+                    rebuildPlatformConfig();
                     // Solo actualizar si no hay modal abierto
                     if (!document.querySelector('.modal.active')) {
                         updateAllViews();
@@ -224,6 +439,11 @@
             return Math.ceil((end - today) / (1000 * 60 * 60 * 24));
         }
 
+        // Un perfil está en venta solo si no está ocupado por un cliente NI bloqueado a mano
+        function isProfileSellable(p) {
+            return !p.occupied && !p.blocked;
+        }
+
         function getStatusByDays(days) {
             if (days > 10) return { class: "badge-success", text: "Activo", color: "success" };
             if (days > 3) return { class: "badge-warning", text: "Por vencer", color: "warning" };
@@ -284,11 +504,15 @@
             if (sectionId === "clients") renderClients();
             if (sectionId === "accounts") renderAccounts();
             if (sectionId === "payments") updateFinanceView();
+            if (sectionId === "platformsCatalog") renderCustomPlatformsCatalog();
         }
 
         function openModal(modalId) {
             document.getElementById(modalId).classList.add("active");
-            if (modalId === "accountModal") resetAccountForm();
+            if (modalId === "accountModal") {
+                populatePlatformSelect();
+                resetAccountForm();
+            }
             else if (modalId === "addClientModal") {
                 resetClientForm();
                 updatePlatformSelection();
@@ -330,16 +554,34 @@
             const platform = document.getElementById("accPlatform").value;
             const deviceContainer = document.getElementById("deviceTypeContainer");
             const deviceSelect = document.getElementById("accDeviceType");
+            const deviceLabel = document.getElementById("deviceTypeLabel");
 
-            if (platform === "Netflix") {
+            if (platformHasSubtypes(platform)) {
                 if (deviceContainer) deviceContainer.style.display = "block";
-                if (deviceSelect) deviceSelect.required = true;
+                if (deviceLabel) deviceLabel.textContent = `Tipo/Categoría de ${platform} *`;
+                if (deviceSelect) {
+                    deviceSelect.required = true;
+                    const options = Object.entries(PLATFORM_CONFIG[platform].subtypes)
+                        .map(([name, info]) => `<option value="${name}">${name} (${info.profiles} perfiles)</option>`)
+                        .join("");
+                    deviceSelect.innerHTML = `<option value="">Selecciona el tipo...</option>${options}`;
+                }
             } else {
                 if (deviceContainer) deviceContainer.style.display = "none";
                 if (deviceSelect) {
                     deviceSelect.required = false;
                     deviceSelect.value = "";
                 }
+            }
+
+            // Si es una plataforma del catálogo con precio/costo por defecto cargados,
+            // precargamos esos valores para no tener que tipearlos de nuevo cada vez.
+            const cp = (appData.customPlatforms || []).find((p) => p.name === platform);
+            if (cp) {
+                const priceInput = document.getElementById("accPrice");
+                const costInput = document.getElementById("accCost");
+                if (priceInput && cp.defaultPrice != null) priceInput.value = cp.defaultPrice;
+                if (costInput && cp.defaultCost != null) costInput.value = cp.defaultCost;
             }
         }
 
@@ -351,6 +593,309 @@
             }
         }
 
+        // ========== CATÁLOGO DE PLATAFORMAS ==========
+
+        // 🧩 Llena el <select id="accPlatform"> con: primero las plataformas de
+        // fábrica (en el orden de siempre) y después, en una sección separada, las
+        // plataformas personalizadas que Facu fue agregando. Se llama cada vez que el
+        // catálogo cambia y también al abrir el modal de Nueva Cuenta, para que nunca
+        // quede desactualizado.
+        function populatePlatformSelect() {
+            const select = document.getElementById("accPlatform");
+            if (!select) return;
+            const previousValue = select.value;
+
+            select.innerHTML = '<option value="">Selecciona una plataforma...</option>';
+
+            BUILTIN_PLATFORM_NAMES.forEach((name) => {
+                const opt = document.createElement("option");
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+
+            const customPlatforms = appData.customPlatforms || [];
+            if (customPlatforms.length > 0) {
+                const group = document.createElement("optgroup");
+                group.label = "🧩 Plataformas Agregadas";
+                customPlatforms.forEach((cp) => {
+                    const opt = document.createElement("option");
+                    opt.value = cp.name;
+                    opt.textContent = `${cp.icon || "📺"} ${cp.name} (${cp.profiles} perfiles)`;
+                    group.appendChild(opt);
+                });
+                select.appendChild(group);
+            }
+
+            // Si había algo seleccionado y todavía existe, lo mantenemos
+            if (previousValue && Array.from(select.options).some((o) => o.value === previousValue)) {
+                select.value = previousValue;
+            }
+        }
+
+        // 🧩 Dibuja las tarjetas del catálogo en la pestaña "Plataformas". Solo
+        // muestra las personalizadas (las de fábrica no se editan ni se borran desde
+        // acá, para no romper la lógica de subtipos de Netflix ni los precios ya
+        // cargados de las demás).
+        function renderCustomPlatformsCatalog() {
+            const grid = document.getElementById("customPlatformsGrid");
+            if (!grid) return;
+
+            const customPlatforms = appData.customPlatforms || [];
+
+            if (customPlatforms.length === 0) {
+                grid.innerHTML = `
+                <p style="color: var(--text-secondary); text-align: center; padding: 30px; grid-column: 1 / -1;">
+                    Todavía no agregaste ninguna plataforma personalizada.<br>
+                    Usá el botón "+ Nueva Plataforma" para sumar la primera (por ejemplo, MioTV).
+                </p>`;
+                return;
+            }
+
+            grid.innerHTML = "";
+            customPlatforms.forEach((cp) => {
+                const accountsOfThisPlatform = appData.accounts.filter((a) => a.platform === cp.name);
+                const totalProfiles = accountsOfThisPlatform.reduce((sum, a) => sum + a.maxProfiles, 0);
+                const occupiedProfiles = accountsOfThisPlatform.reduce(
+                    (sum, a) => sum + a.profiles.filter((p) => p.occupied).length, 0
+                );
+
+                const config = { icon: cp.icon || "📺", isCustom: true, customColorHex: cp.colorHex || "#3b82f6" };
+
+                const card = document.createElement("div");
+                card.className = "platform-card";
+                card.innerHTML = `
+                <div class="platform-header">
+                    <div class="platform-name">
+                        ${platformIconHtml(config, cp.name)}
+                        <div>
+                            <div>${cp.name}</div>
+                            <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">${cp.profiles} perfiles por cuenta</div>
+                        </div>
+                    </div>
+                    <div class="action-btns">
+                        <button class="btn btn-secondary" onclick="editCustomPlatform(${cp.id})" style="padding: 6px 12px; font-size: 11px;">✏️</button>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; font-size: 13px; color: var(--text-secondary);">
+                    ${accountsOfThisPlatform.length > 0
+                        ? `${accountsOfThisPlatform.length} cuenta(s) registrada(s) • ${occupiedProfiles}/${totalProfiles} perfiles ocupados`
+                        : "Todavía no tiene ninguna cuenta registrada"}
+                </div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(59, 130, 246, 0.2);">
+                    <button class="btn btn-primary" style="width: 100%; font-size: 12px;" onclick="goToAccountsWithPlatform('${cp.name}')">
+                        + Registrar cuenta de ${cp.name}
+                    </button>
+                </div>
+            `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Acceso rápido: desde el catálogo, ir directo a "Nueva Cuenta" con la
+        // plataforma ya seleccionada.
+        function goToAccountsWithPlatform(platformName) {
+            showSection("accounts");
+            document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
+            const accountsTab = Array.from(document.querySelectorAll(".nav-tab")).find((t) => t.textContent.includes("Cuentas"));
+            if (accountsTab) accountsTab.classList.add("active");
+            openModal("accountModal");
+            const select = document.getElementById("accPlatform");
+            if (select) {
+                select.value = platformName;
+                handlePlatformChange();
+            }
+        }
+
+        document.getElementById("newPlatformForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const name = document.getElementById("newPlatformName").value.trim();
+            const profiles = parseInt(document.getElementById("newPlatformProfiles").value);
+            const icon = document.getElementById("newPlatformIcon").value.trim();
+            const colorHex = document.getElementById("newPlatformColor").value;
+            const priceStr = document.getElementById("newPlatformPrice").value;
+            const costStr = document.getElementById("newPlatformCost").value;
+
+            if (!name) {
+                alert("⚠️ Ingresá un nombre para la plataforma");
+                return;
+            }
+
+            const allNames = [...BUILTIN_PLATFORM_NAMES, ...(appData.customPlatforms || []).map((cp) => cp.name)];
+            if (allNames.some((n) => n.toLowerCase() === name.toLowerCase())) {
+                alert(`⚠️ Ya existe una plataforma llamada "${name}"`);
+                return;
+            }
+
+            if (!profiles || profiles < 1) {
+                alert("⚠️ La cantidad de perfiles debe ser mayor a 0");
+                return;
+            }
+
+            if (!appData.customPlatforms) appData.customPlatforms = [];
+            appData.customPlatforms.push({
+                id: Date.now(),
+                name,
+                profiles,
+                icon: icon || "📺",
+                colorClass: "custom-platform",
+                colorHex: colorHex || "#3b82f6",
+                defaultPrice: priceStr !== "" ? parseFloat(priceStr) : null,
+                defaultCost: costStr !== "" ? parseFloat(costStr) : null,
+            });
+
+            if (pendingNewPlatformLogo) {
+                if (!appData.platformLogos) appData.platformLogos = {};
+                appData.platformLogos[name] = pendingNewPlatformLogo;
+            }
+
+            rebuildPlatformConfig();
+
+            saveData().then(() => {
+                closeModal("newPlatformModal");
+                document.getElementById("newPlatformForm").reset();
+                document.getElementById("newPlatformColor").value = "#3b82f6";
+                pendingNewPlatformLogo = null;
+                const wrap = document.getElementById("newPlatformLogoPreviewWrap");
+                if (wrap) wrap.style.display = "none";
+                renderCustomPlatformsCatalog();
+                populatePlatformSelect();
+                showNotification(`✅ Plataforma "${name}" agregada. Ya podés registrar cuentas de ${name} en 📺 Cuentas.`, "success");
+            });
+        });
+
+        function editCustomPlatform(id) {
+            const cp = (appData.customPlatforms || []).find((p) => p.id === id);
+            if (!cp) return;
+
+            document.getElementById("editPlatformCatalogId").value = cp.id;
+            document.getElementById("editPlatformCatalogName").value = cp.name;
+            document.getElementById("editPlatformCatalogProfiles").value = cp.profiles;
+            document.getElementById("editPlatformCatalogIcon").value = cp.icon || "";
+            document.getElementById("editPlatformCatalogColor").value = cp.colorHex || "#3b82f6";
+            document.getElementById("editPlatformCatalogPrice").value = cp.defaultPrice != null ? cp.defaultPrice : "";
+            document.getElementById("editPlatformCatalogCost").value = cp.defaultCost != null ? cp.defaultCost : "";
+
+            pendingEditPlatformLogo = null;
+            const fileInput = document.getElementById("editPlatformCatalogLogoFile");
+            if (fileInput) fileInput.value = "";
+            const preview = document.getElementById("editPlatformCatalogLogoPreview");
+            const wrap = document.getElementById("editPlatformCatalogLogoPreviewWrap");
+            const existingLogo = getPlatformLogo(cp.name);
+            if (existingLogo && preview && wrap) {
+                preview.src = existingLogo;
+                wrap.style.display = "flex";
+            } else if (wrap) {
+                wrap.style.display = "none";
+            }
+
+            openModal("editPlatformCatalogModal");
+        }
+
+        document.getElementById("editPlatformCatalogForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            const id = parseInt(document.getElementById("editPlatformCatalogId").value);
+            const cp = (appData.customPlatforms || []).find((p) => p.id === id);
+            if (!cp) return;
+
+            const newName = document.getElementById("editPlatformCatalogName").value.trim();
+            const newProfiles = parseInt(document.getElementById("editPlatformCatalogProfiles").value);
+            const priceStr = document.getElementById("editPlatformCatalogPrice").value;
+            const costStr = document.getElementById("editPlatformCatalogCost").value;
+
+            if (!newName) {
+                alert("⚠️ Ingresá un nombre para la plataforma");
+                return;
+            }
+
+            const allOtherNames = [
+                ...BUILTIN_PLATFORM_NAMES,
+                ...(appData.customPlatforms || []).filter((p) => p.id !== id).map((p) => p.name),
+            ];
+            if (allOtherNames.some((n) => n.toLowerCase() === newName.toLowerCase())) {
+                alert(`⚠️ Ya existe otra plataforma llamada "${newName}"`);
+                return;
+            }
+
+            const oldName = cp.name;
+            const nameChanged = oldName !== newName;
+
+            cp.name = newName;
+            cp.profiles = newProfiles;
+            cp.icon = document.getElementById("editPlatformCatalogIcon").value.trim() || "📺";
+            cp.colorHex = document.getElementById("editPlatformCatalogColor").value;
+            cp.defaultPrice = priceStr !== "" ? parseFloat(priceStr) : null;
+            cp.defaultCost = costStr !== "" ? parseFloat(costStr) : null;
+
+            // Si se cambió el nombre, hay que propagarlo a las cuentas y asignaciones
+            // de clientes existentes para que no queden "huérfanas" apuntando a un
+            // nombre de plataforma que ya no existe.
+            if (nameChanged) {
+                appData.accounts.forEach((acc) => {
+                    if (acc.platform === oldName) acc.platform = newName;
+                });
+                appData.clients.forEach((client) => {
+                    client.assignments.forEach((ass) => {
+                        if (ass.platform === oldName) ass.platform = newName;
+                    });
+                });
+            }
+
+            // Logo: si subieron uno nuevo, se guarda con el nombre actual; si tocaron
+            // "Quitar logo", se borra; si no tocaron nada pero cambió el nombre, se
+            // mueve el logo existente a la nueva clave para no perderlo.
+            if (!appData.platformLogos) appData.platformLogos = {};
+            if (pendingEditPlatformLogo === "") {
+                delete appData.platformLogos[oldName];
+            } else if (pendingEditPlatformLogo) {
+                if (nameChanged) delete appData.platformLogos[oldName];
+                appData.platformLogos[newName] = pendingEditPlatformLogo;
+            } else if (nameChanged && appData.platformLogos[oldName]) {
+                appData.platformLogos[newName] = appData.platformLogos[oldName];
+                delete appData.platformLogos[oldName];
+            }
+
+            rebuildPlatformConfig();
+
+            saveData().then(() => {
+                closeModal("editPlatformCatalogModal");
+                pendingEditPlatformLogo = null;
+                renderCustomPlatformsCatalog();
+                populatePlatformSelect();
+                updateAllViews();
+                showNotification(`✅ Plataforma actualizada correctamente`, "success");
+            });
+        });
+
+        function deleteCustomPlatform() {
+            const id = parseInt(document.getElementById("editPlatformCatalogId").value);
+            const cp = (appData.customPlatforms || []).find((p) => p.id === id);
+            if (!cp) return;
+
+            const hasAccounts = appData.accounts.some((a) => a.platform === cp.name);
+            if (hasAccounts) {
+                alert("⚠️ No podés eliminar esta plataforma porque ya tiene cuentas registradas. Primero eliminá esas cuentas desde 📺 Cuentas.");
+                return;
+            }
+
+            if (!confirm(`¿Eliminar la plataforma "${cp.name}" del catálogo?`)) return;
+
+            appData.customPlatforms = appData.customPlatforms.filter((p) => p.id !== id);
+            if (appData.platformLogos && appData.platformLogos[cp.name]) {
+                delete appData.platformLogos[cp.name];
+            }
+            rebuildPlatformConfig();
+
+            saveData().then(() => {
+                closeModal("editPlatformCatalogModal");
+                renderCustomPlatformsCatalog();
+                populatePlatformSelect();
+                showNotification(`✅ Plataforma "${cp.name}" eliminada`, "success");
+            });
+        }
+
         // ========== CUENTAS ==========
         document.getElementById("accountForm").addEventListener("submit", function (e) {
             e.preventDefault();
@@ -358,10 +903,10 @@
             let deviceType = "Todos";
             let maxProfiles;
 
-            if (platform === "Netflix") {
+            if (platformHasSubtypes(platform)) {
                 deviceType = document.getElementById("accDeviceType").value;
                 if (!deviceType) {
-                    alert("⚠️ Debes seleccionar el tipo de dispositivo para Netflix");
+                    alert(`⚠️ Debes seleccionar el tipo/categoría para ${platform}`);
                     return;
                 }
                 maxProfiles = PLATFORM_CONFIG[platform].subtypes[deviceType].profiles;
@@ -384,6 +929,7 @@
                     occupied: false,
                     clientId: null,
                     expiryDate: null,
+                    blocked: false,
                 })),
             };
 
@@ -408,7 +954,7 @@
             document.getElementById("editAccNextPayment").value = account.nextPayment;
 
             const deviceGroup = document.getElementById("editDeviceTypeGroup");
-            if (account.platform === "Netflix") {
+            if (platformHasSubtypes(account.platform)) {
                 if (deviceGroup) deviceGroup.style.display = "block";
                 document.getElementById("editAccDeviceType").value = account.deviceType;
             } else {
@@ -439,7 +985,7 @@
                     appData.clients.forEach((client) => {
                         client.assignments.forEach((ass) => {
                             if (ass.accountEmail === account.email && ass.platform === account.platform) {
-                                if (account.platform === "Netflix" && ass.deviceType !== account.deviceType) return;
+                                if (platformHasSubtypes(account.platform) && ass.deviceType !== account.deviceType) return;
                                 ass.password = newPassword;
                                 clientsUpdated++;
                             }
@@ -503,10 +1049,9 @@
             grid.innerHTML = "";
             quickEditor.innerHTML = "";
 
+            // ---------- Editor rápido de precio/costo: uno por cuenta, sin agrupar ----------
             appData.accounts.forEach((account) => {
-                const availableProfiles = account.profiles.filter((p) => !p.occupied).length;
                 const config = PLATFORM_CONFIG[account.platform];
-
                 const priceEditor = document.createElement("div");
                 priceEditor.style.cssText = "background: var(--bg-secondary); padding: 15px; border-radius: 10px; border: 1px solid rgba(59, 130, 246, 0.2);";
                 priceEditor.innerHTML = `
@@ -515,7 +1060,7 @@
                         <span style="font-size: 20px;">${config.icon}</span>
                         <div>
                             <div style="font-weight: 700; font-size: 14px;">${account.platform}</div>
-                            ${account.platform === "Netflix" ? `<span class="platform-subtype">${account.deviceType}</span>` : ""}
+                            ${platformHasSubtypes(account.platform) ? `<span class="platform-subtype">${account.deviceType}</span>` : ""}
                         </div>
                     </div>
                     <button onclick="editAccount(${account.id})" style="background: none; border: none; color: var(--accent-primary); cursor: pointer; font-size: 16px;">✏️</button>
@@ -532,24 +1077,74 @@
                 </div>
             `;
                 quickEditor.appendChild(priceEditor);
+            });
 
-                const card = document.createElement("div");
-                card.className = "platform-card";
-                let profilesHtml = '<div class="profile-slots">';
-                account.profiles.forEach((profile, idx) => {
-                    const className = profile.occupied ? "slot-occupied" : "slot-available";
-                    const title = profile.occupied ? `Ocupado por PIN: ${profile.clientId}` : "Disponible";
-                    profilesHtml += `<div class="profile-slot ${className}" title="${title}">${idx + 1}</div>`;
-                });
-                profilesHtml += "</div>";
+            // ---------- Tarjetas principales ----------
+            // Las plataformas con subtipos (Netflix, Disney+) se agrupan en UNA sola
+            // tarjeta por email, con una sección por subtipo (en el orden definido en
+            // PLATFORM_CONFIG: ej. Smart siempre arriba, Móvil/PC o Común abajo). El
+            // resto de las plataformas se sigue mostrando como antes, una tarjeta por cuenta.
+            const groupedIds = new Set();
+            const groups = [];
 
-                card.innerHTML = `
+            appData.accounts.forEach((account) => {
+                if (!platformHasSubtypes(account.platform)) return;
+                let group = groups.find((g) => g.platform === account.platform && g.email === account.email);
+                if (!group) {
+                    group = { platform: account.platform, email: account.email, accounts: [] };
+                    groups.push(group);
+                }
+                group.accounts.push(account);
+                groupedIds.add(account.id);
+            });
+
+            groups.forEach((group) => grid.appendChild(buildGroupedAccountCard(group)));
+
+            appData.accounts.forEach((account) => {
+                if (groupedIds.has(account.id)) return;
+                grid.appendChild(buildSingleAccountCard(account));
+            });
+        }
+
+        // Grilla de perfiles (numeritos clickeables) de UNA cuenta puntual.
+        function buildProfileSlotsHtml(account) {
+            let html = '<div class="profile-slots">';
+            account.profiles.forEach((profile, idx) => {
+                let className, title, clickHandler;
+                if (profile.occupied) {
+                    className = "slot-occupied";
+                    title = `Ocupado por PIN: ${profile.clientId}`;
+                    clickHandler = "";
+                } else if (profile.blocked) {
+                    className = "slot-blocked";
+                    title = "🔒 No se vende (click para habilitar)";
+                    clickHandler = `onclick="toggleProfileBlock(${account.id}, ${profile.number})"`;
+                } else {
+                    className = "slot-available";
+                    title = "Disponible (click para no vender este perfil)";
+                    clickHandler = `onclick="toggleProfileBlock(${account.id}, ${profile.number})"`;
+                }
+                html += `<div class="profile-slot ${className}" title="${title}" ${clickHandler}>${idx + 1}</div>`;
+            });
+            html += "</div>";
+            return html;
+        }
+
+        // Tarjeta de una cuenta que vende una plataforma SIN subtipos (la mayoría)
+        function buildSingleAccountCard(account) {
+            const sellableProfiles = account.profiles.filter(isProfileSellable).length;
+            const blockedProfiles = account.profiles.filter((p) => !p.occupied && p.blocked).length;
+            const config = PLATFORM_CONFIG[account.platform];
+
+            const card = document.createElement("div");
+            card.className = "platform-card";
+            card.innerHTML = `
                 <div class="platform-header">
                     <div class="platform-name">
-                        <div class="platform-icon ${config.color}">${config.icon}</div>
+                        ${platformIconHtml(config, account.platform)}
                         <div>
                             ${account.platform}
-                            ${account.platform === "Netflix" ? `<div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">${account.deviceType}</div>` : ""}
+                            ${platformHasSubtypes(account.platform) ? `<div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">${account.deviceType}</div>` : ""}
                         </div>
                     </div>
                     <div class="action-btns">
@@ -562,16 +1157,95 @@
                         <span class="highlight-primary">💰 Venta: $${account.pricePerProfile.toFixed(2)}/perfil</span>
                     </div>
                 </div>
-                ${profilesHtml}
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(59, 130, 246, 0.2); display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                ${buildProfileSlotsHtml(account)}
+                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">🔒 Click en un perfil libre para no venderlo este mes</small>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(59, 130, 246, 0.2); display: flex; justify-content: space-between; align-items: center; font-size: 12px; gap: 8px;">
                     <div>
                         <span style="color: var(--text-secondary);">Próximo pago:</span><br>
                         <span class="date-display">${formatDate(account.nextPayment)}</span>
                     </div>
-                    <span class="badge ${availableProfiles > 0 ? "badge-success" : "badge-danger"}">${availableProfiles} libres</span>
+                    <div style="display: flex; gap: 6px;">
+                        ${blockedProfiles > 0 ? `<span class="badge badge-warning">🔒 ${blockedProfiles} sin vender</span>` : ""}
+                        <span class="badge ${sellableProfiles > 0 ? "badge-success" : "badge-danger"}">${sellableProfiles} libres</span>
+                    </div>
                 </div>
             `;
-                grid.appendChild(card);
+            return card;
+        }
+
+        // Tarjeta ÚNICA para un grupo de cuentas que comparten plataforma + email
+        // (ej: el mismo login de Netflix vendido como Smart TV y como Móvil/PC).
+        // Cada subtipo se muestra como una sección propia, en el orden en que
+        // aparecen en PLATFORM_CONFIG[platform].subtypes.
+        function buildGroupedAccountCard(group) {
+            const config = PLATFORM_CONFIG[group.platform];
+            const subtypeOrder = Object.keys(config.subtypes || {});
+            const orderedAccounts = [...group.accounts].sort(
+                (a, b) => subtypeOrder.indexOf(a.deviceType) - subtypeOrder.indexOf(b.deviceType),
+            );
+
+            const card = document.createElement("div");
+            card.className = "platform-card platform-card-grouped";
+
+            let sectionsHtml = "";
+            orderedAccounts.forEach((account, idx) => {
+                const sellableProfiles = account.profiles.filter(isProfileSellable).length;
+                const blockedProfiles = account.profiles.filter((p) => !p.occupied && p.blocked).length;
+                sectionsHtml += `
+                <div class="account-subsection"${idx > 0 ? ' style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed rgba(59, 130, 246, 0.25);"' : ""}>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span class="platform-subtype">${account.deviceType}</span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="highlight-primary" style="font-size: 12px;">💰 $${account.pricePerProfile.toFixed(2)}/perfil</span>
+                            <button class="btn btn-secondary" onclick="editAccount(${account.id})" style="padding: 4px 10px; font-size: 11px;">✏️</button>
+                        </div>
+                    </div>
+                    ${buildProfileSlotsHtml(account)}
+                    <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary);">
+                        <span>Próximo pago: <span class="date-display">${formatDate(account.nextPayment)}</span></span>
+                        <div style="display: flex; gap: 6px;">
+                            ${blockedProfiles > 0 ? `<span class="badge badge-warning">🔒 ${blockedProfiles} sin vender</span>` : ""}
+                            <span class="badge ${sellableProfiles > 0 ? "badge-success" : "badge-danger"}">${sellableProfiles} libres</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            });
+
+            card.innerHTML = `
+                <div class="platform-header">
+                    <div class="platform-name">
+                        ${platformIconHtml(config, group.platform)}
+                        <div>
+                            ${group.platform}
+                            <div style="font-size: 11px; color: var(--text-secondary); font-weight: 500;">📧 ${group.email}</div>
+                        </div>
+                    </div>
+                </div>
+                ${sectionsHtml}
+                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 10px;">🔒 Click en un perfil libre para no venderlo este mes</small>
+            `;
+            return card;
+        }
+
+        // Bloquear o habilitar un perfil puntual para que no aparezca como disponible al vender
+        function toggleProfileBlock(accountId, profileNumber) {
+            const account = appData.accounts.find((a) => a.id === accountId);
+            if (!account) return;
+            const profile = account.profiles.find((p) => p.number === profileNumber);
+            if (!profile || profile.occupied) return;
+
+            profile.blocked = !profile.blocked;
+
+            saveData().then(() => {
+                renderAccounts();
+                updateAllViews();
+                showNotification(
+                    profile.blocked
+                        ? `🔒 Perfil #${profileNumber} de ${account.platform} marcado como NO disponible`
+                        : `🔓 Perfil #${profileNumber} de ${account.platform} vuelve a estar disponible`,
+                    "success"
+                );
             });
         }
 
@@ -611,7 +1285,7 @@
             container.innerHTML = "";
 
             const availableAccounts = appData.accounts.filter((acc) =>
-                acc.profiles.some((p) => !p.occupied),
+                acc.profiles.some(isProfileSellable),
             );
             if (availableAccounts.length === 0) {
                 container.innerHTML = '<p style="color: var(--accent-danger);">⚠️ No hay perfiles disponibles. Primero debes registrar cuentas.</p>';
@@ -620,7 +1294,7 @@
 
             const grouped = {};
             availableAccounts.forEach((acc) => {
-                const key = acc.platform === "Netflix" ? `Netflix - ${acc.deviceType}` : acc.platform;
+                const key = platformHasSubtypes(acc.platform) ? `${acc.platform} - ${acc.deviceType}` : acc.platform;
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(acc);
             });
@@ -630,7 +1304,7 @@
                 const deviceType = accounts[0].deviceType;
                 const config = PLATFORM_CONFIG[platform];
                 const availableCount = accounts.reduce(
-                    (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                    (sum, acc) => sum + acc.profiles.filter(isProfileSellable).length,
                     0,
                 );
 
@@ -644,11 +1318,20 @@
                         <span style="font-size: 28px;">${config.icon}</span>
                         <div>
                             <div style="font-weight: 700; font-size: 16px;">${platform}</div>
-                            ${platform === "Netflix" ? `<span class="platform-subtype">${deviceType}</span>` : ""}
+                            ${platformHasSubtypes(platform) ? `<span class="platform-subtype">${deviceType}</span>` : ""}
                         </div>
                     </div>
                     <span class="badge badge-success">${availableCount} disponibles</span>
                 </div>
+                ${accounts.length > 1 ? `
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size: 12px; color: var(--text-secondary);">🎯 Cuenta específica (opcional)</label>
+                    <select class="account-select" data-platform="${platform}" data-device="${deviceType}" style="width: 100%; margin-top: 4px;" onchange="onAccountSelectChange(this)">
+                        <option value="">Automático (reparte entre las cuentas con cupo)</option>
+                        ${accounts.map((a) => `<option value="${a.id}">${a.email} — ${a.profiles.filter(isProfileSellable).length} libres</option>`).join("")}
+                    </select>
+                </div>
+                ` : ""}
                 <div style="display: flex; gap: 15px; align-items: center;">
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: var(--text-secondary);">Duración</label>
@@ -671,19 +1354,51 @@
             });
         }
 
+        // Cuando eligen una cuenta específica (o vuelven a "Automático"), recalcular
+        // el máximo de perfiles disponibles para la cantidad
+        function onAccountSelectChange(selectEl) {
+            const card = selectEl.closest(".card");
+            const qtyInput = card.querySelector(".quantity-input");
+            if (!qtyInput) return;
+
+            let max;
+            if (selectEl.value) {
+                const account = appData.accounts.find((a) => a.id === parseInt(selectEl.value));
+                max = account ? account.profiles.filter(isProfileSellable).length : 0;
+            } else {
+                const platform = selectEl.dataset.platform;
+                const deviceType = selectEl.dataset.device;
+                const accounts = appData.accounts.filter((a) =>
+                    a.platform === platform && (!platformHasSubtypes(platform) || a.deviceType === deviceType)
+                );
+                max = accounts.reduce((sum, acc) => sum + acc.profiles.filter(isProfileSellable).length, 0);
+            }
+
+            qtyInput.max = max;
+            if (parseInt(qtyInput.value) > max) qtyInput.value = Math.max(max, 1);
+            if (typeof updatePriceSummary === "function") updatePriceSummary();
+        }
+
         function addToCart(platform, deviceType) {
             const accountIds = Array.prototype.slice.call(arguments, 2);
-            const accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
+            const container = event.target.closest(".card");
+            const accountSelect = container.querySelector(".account-select");
+
+            let accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
+            // Si eligieron una cuenta específica, restringimos la asignación a esa sola cuenta
+            if (accountSelect && accountSelect.value) {
+                accounts = accounts.filter((a) => a.id === parseInt(accountSelect.value));
+            }
+
             const available = accounts.reduce(
-                (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                (sum, acc) => sum + acc.profiles.filter(isProfileSellable).length,
                 0,
             );
-            const container = event.target.closest(".card");
             const durationMonths = parseInt(container.querySelector(".duration-select").value);
             const quantity = parseInt(container.querySelector(".quantity-input").value);
 
             if (quantity > available) {
-                alert(`⚠️ Solo hay ${available} perfiles disponibles`);
+                alert(`⚠️ Solo hay ${available} perfiles disponibles${accountSelect && accountSelect.value ? " en esa cuenta" : ""}`);
                 return;
             }
 
@@ -714,7 +1429,7 @@
                 discount,
                 discountType,
                 total: subtotal - discount,
-                accountIds,
+                accountIds: accounts.map((a) => a.id),
                 startDate: startDate.toISOString(),
                 endDate: endDate.toISOString(),
             };
@@ -817,7 +1532,7 @@
                 <div class="summary-row">
                     <div>
                         ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
-                        ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
+                        ${platformHasSubtypes(item.platform) ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
                         <br><small style="color: var(--text-secondary);">
                             ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
                         </small>
@@ -897,7 +1612,7 @@
                 for (const acc of accounts) {
                     if (assignedCount >= item.quantity) break;
                     for (let i = acc.profiles.length - 1; i >= 0; i--) {
-                        if (!acc.profiles[i].occupied && assignedCount < item.quantity) {
+                        if (isProfileSellable(acc.profiles[i]) && assignedCount < item.quantity) {
                             acc.profiles[i].occupied = true;
                             acc.profiles[i].clientId = pin;
                             acc.profiles[i].expiryDate = endDate.toISOString();
@@ -911,6 +1626,7 @@
                                 durationMonths: item.durationMonths,
                                 durationDays: item.durationDays,
                                 expiryDate: endDate.toISOString(),
+                                startDate: startDate.toISOString(),
                             });
                             assignedCount++;
                         }
@@ -975,7 +1691,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
-                        ${ass.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${ass.deviceType})</span>` : ""}<br>
+                        ${platformHasSubtypes(ass.platform) ? `<span style="color: var(--text-secondary);">(${ass.deviceType})</span>` : ""}<br>
                         <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
                     </div>
                 </div>
@@ -993,23 +1709,175 @@
             updateAllViews();
         }
 
+        // ========== Helpers de ordenamiento y filtro de clientes ==========
+
+        // La plataforma "principal" de un cliente para ordenar por plataforma:
+        // la primera en orden alfabético entre las que tiene contratadas.
+        function getClientSortPlatform(client) {
+            if (!client.assignments || client.assignments.length === 0) return "";
+            const names = client.assignments.map((a) => a.platform);
+            return [...names].sort((a, b) => a.localeCompare(b))[0];
+        }
+
+        // Días restantes del vencimiento más próximo (puede ser negativo si ya venció)
+        function getClientDaysLeft(client) {
+            if (!client.assignments || client.assignments.length === 0) return Infinity;
+            return Math.min(...client.assignments.map((a) => getDaysRemaining(a.expiryDate)));
+        }
+
+        // Nivel de urgencia del estado: 4 = Vencido, 3 = Crítico, 2 = Por vencer, 1 = Activo
+        function getClientSeverity(client) {
+            const days = getClientDaysLeft(client);
+            if (days <= 0) return 4;
+            if (days <= 3) return 3;
+            if (days <= 10) return 2;
+            return 1;
+        }
+
+        function getClientNames(client) {
+            const lastName = (client.lastName || client.name.split(" ").pop() || "").toLowerCase();
+            const firstName = (client.firstName || client.name.replace(" " + (client.lastName || client.name.split(" ").pop()), "") || "").toLowerCase();
+            return { lastName, firstName };
+        }
+
+        // Compara dos clientes según currentSortField/currentSortDirection.
+        // Si hay empate en el campo elegido, siempre desempata por Apellido.
+        function compareClients(a, b) {
+            const namesA = getClientNames(a);
+            const namesB = getClientNames(b);
+            const lastNameTiebreak = namesA.lastName.localeCompare(namesB.lastName) || namesA.firstName.localeCompare(namesB.firstName);
+
+            let cmp;
+            switch (currentSortField) {
+                case "platform":
+                    cmp = getClientSortPlatform(a).toLowerCase().localeCompare(getClientSortPlatform(b).toLowerCase());
+                    break;
+                case "expiry":
+                    cmp = getClientDaysLeft(a) - getClientDaysLeft(b);
+                    break;
+                case "estado":
+                    cmp = getClientSeverity(a) - getClientSeverity(b);
+                    break;
+                case "lastName":
+                default:
+                    cmp = namesA.lastName.localeCompare(namesB.lastName);
+            }
+
+            if (currentSortDirection === "desc") cmp = -cmp;
+
+            return cmp !== 0 ? cmp : lastNameTiebreak;
+        }
+
+        // Botón de orden de una columna: 1er click = descendente, 2do click =
+        // ascendente, 3er click = vuelve al orden base (Apellido descendente).
+        function handleSortButtonClick(field) {
+            if (currentSortField !== field) {
+                currentSortField = field;
+                currentSortDirection = "desc";
+            } else if (currentSortDirection === "desc") {
+                currentSortDirection = "asc";
+            } else {
+                currentSortField = "lastName";
+                currentSortDirection = "desc";
+            }
+
+            renderClients();
+            const searchInput = document.getElementById("clientSearch");
+            if (searchInput && searchInput.value.trim().length >= 2) {
+                searchClients();
+            }
+        }
+
+        function updateSortButtonsUI() {
+            ["lastName", "platform", "expiry", "estado"].forEach((field) => {
+                const btn = document.getElementById("sortBtn-" + field);
+                if (!btn) return;
+                if (field === currentSortField) {
+                    btn.textContent = currentSortDirection === "desc" ? "▼" : "▲";
+                    btn.classList.add("sort-btn-active");
+                } else {
+                    btn.textContent = "⇅";
+                    btn.classList.remove("sort-btn-active");
+                }
+            });
+        }
+
+        // ---------- Filtro por botones de plataforma ----------
+
+        // Clave única por "tipo" de plataforma. Netflix se separa por tipo de
+        // dispositivo (Smart TV / Móvil-PC) porque se vende como algo distinto;
+        // el resto de las plataformas se identifican solo por su nombre.
+        function getPlatformFilterKey(platform, deviceType) {
+            return platformHasSubtypes(platform) ? `${platform}::${deviceType || ""}` : platform;
+        }
+
+        function clientMatchesPlatformFilters(client) {
+            if (activePlatformFilters.size === 0) return true;
+            return client.assignments.some((a) => activePlatformFilters.has(getPlatformFilterKey(a.platform, a.deviceType)));
+        }
+
+        // Genera un botón por cada tipo de plataforma que exista realmente en
+        // 📺 Cuentas. Se llama cada vez que cambian las cuentas, así que si se
+        // registra una cuenta de una plataforma/tipo nuevo, su botón aparece solo.
+        function renderPlatformFilterButtons() {
+            const container = document.getElementById("platformFilterButtons");
+            if (!container) return;
+
+            const seen = new Map();
+            appData.accounts.forEach((acc) => {
+                const key = getPlatformFilterKey(acc.platform, acc.deviceType);
+                if (!seen.has(key)) {
+                    const label = platformHasSubtypes(acc.platform) ? `${acc.platform} ${acc.deviceType}` : acc.platform;
+                    seen.set(key, { key, label, platform: acc.platform });
+                }
+            });
+
+            const entries = [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
+
+            if (entries.length === 0) {
+                container.innerHTML = '<small style="color: var(--text-secondary);">Todavía no hay cuentas registradas.</small>';
+                return;
+            }
+
+            container.innerHTML = entries.map((entry) => {
+                const config = PLATFORM_CONFIG[entry.platform] || { icon: "📺" };
+                const isActive = activePlatformFilters.has(entry.key);
+                const safeKey = entry.key.replace(/'/g, "\\'");
+                return `<button type="button" class="platform-filter-btn${isActive ? " active" : ""}" onclick="togglePlatformFilter('${safeKey}')">${platformIconInline(entry.platform, 16)} ${entry.label}</button>`;
+            }).join("");
+        }
+
+        function togglePlatformFilter(key) {
+            if (activePlatformFilters.has(key)) {
+                activePlatformFilters.delete(key);
+            } else {
+                activePlatformFilters.add(key);
+            }
+            renderPlatformFilterButtons();
+            renderClients();
+            const searchInput = document.getElementById("clientSearch");
+            if (searchInput && searchInput.value.trim().length >= 2) {
+                searchClients();
+            }
+        }
+
         function renderClients() {
             const tbody = document.getElementById("clientsTable");
             if (!tbody) return;
             tbody.innerHTML = "";
 
-            let sortedClients = [...appData.clients].sort((a, b) => {
-                const lastNameA = (a.lastName || a.name.split(" ").pop()).toLowerCase();
-                const lastNameB = (b.lastName || b.name.split(" ").pop()).toLowerCase();
-                return currentSort === "asc" ? lastNameA.localeCompare(lastNameB) : lastNameB.localeCompare(lastNameA);
-            });
+            let sortedClients = appData.clients
+                .filter(clientMatchesPlatformFilters)
+                .sort((a, b) => compareClients(a, b));
+
+            updateSortButtonsUI();
 
             if (sortedClients.length === 0) {
                 tbody.innerHTML = `
                 <tr>
                     <td colspan="6" class="empty-state">
                         <div class="empty-state-icon">👥</div>
-                        <p>No hay clientes registrados</p>
+                        <p>${activePlatformFilters.size > 0 ? "Ningún cliente tiene las plataformas tildadas" : "No hay clientes registrados"}</p>
                     </td>
                 </tr>
             `;
@@ -1049,12 +1917,6 @@
             });
         }
 
-        function toggleSort() {
-            currentSort = currentSort === "asc" ? "desc" : "asc";
-            document.getElementById("sortIcon").textContent = currentSort === "asc" ? "📋" : "📋⬇️";
-            document.getElementById("sortText").textContent = currentSort === "asc" ? "Ordenar por Apellido (A-Z)" : "Ordenar por Apellido (Z-A)";
-            renderClients();
-        }
 
         function searchClients() {
             const query = document.getElementById("clientSearch").value.toLowerCase().trim();
@@ -1069,11 +1931,15 @@
 
             const matches = appData.clients.filter(
                 (c) =>
-                    c.name.toLowerCase().includes(query) ||
-                    (c.firstName && c.firstName.toLowerCase().includes(query)) ||
-                    (c.lastName && c.lastName.toLowerCase().includes(query)) ||
-                    c.pin.includes(query),
+                    clientMatchesPlatformFilters(c) &&
+                    (c.name.toLowerCase().includes(query) ||
+                        (c.firstName && c.firstName.toLowerCase().includes(query)) ||
+                        (c.lastName && c.lastName.toLowerCase().includes(query)) ||
+                        c.pin.includes(query) ||
+                        c.assignments.some((a) => a.platform.toLowerCase().includes(query))),
             );
+
+            matches.sort((a, b) => compareClients(a, b));
 
             if (matches.length === 0) {
                 listDiv.innerHTML = '<p style="color: var(--text-secondary);">No se encontraron clientes</p>';
@@ -1138,7 +2004,7 @@
                                         <strong style="font-size: 16px; color: ${isExpired ? 'var(--accent-danger)' : 'var(--text-primary)'};">
                                             ${ass.platform}
                                         </strong>
-                                        ${ass.platform === "Netflix" ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${ass.deviceType}</div>` : ""}
+                                        ${platformHasSubtypes(ass.platform) ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${ass.deviceType}</div>` : ""}
                                     </div>
                                 </div>
                                 <span class="badge ${assDaysLeft <= 3 ? 'badge-danger' : assDaysLeft <= 10 ? 'badge-warning' : 'badge-success'}" style="font-size: 11px;">
@@ -1229,6 +2095,13 @@
             document.getElementById("editClientPin").value = client.pin;
             document.getElementById("editClientPaymentDate").value = client.paymentDate ? client.paymentDate.split("T")[0] : "";
 
+            // 🔧 CORRECCIÓN: la fecha de inicio para PLATAFORMAS NUEVAS es un campo
+            // independiente de la fecha de pago original del cliente, y se inicializa
+            // siempre con la fecha de hoy (el día en que efectivamente se está
+            // agregando la nueva contratación), no con client.paymentDate.
+            const newPlatformsStartInput = document.getElementById("editNewPlatformsStartDate");
+            if (newPlatformsStartInput) newPlatformsStartInput.valueAsDate = new Date();
+
             renderEditCurrentAssignments(client);
             editCurrentCart = [];
             updateEditPlatformSelection();
@@ -1265,7 +2138,7 @@
             client.assignments.forEach((ass) => {
                 ass.expiryDate = newIso;
                 const account = appData.accounts.find((a) => {
-                    if (ass.platform === "Netflix") {
+                    if (platformHasSubtypes(ass.platform)) {
                         return a.email === ass.accountEmail && a.platform === ass.platform && a.deviceType === ass.deviceType;
                     }
                     return a.email === ass.accountEmail && a.platform === ass.platform;
@@ -1327,7 +2200,7 @@
                         <strong style="font-size: 16px; color: ${isExpired ? "var(--accent-danger)" : "var(--text-primary)"};">
                             ${config.icon} ${ass.platform}
                         </strong>
-                        ${ass.platform === "Netflix" ? `<span style="color: var(--text-secondary); font-size: 12px;">(${ass.deviceType})</span>` : ""}
+                        ${platformHasSubtypes(ass.platform) ? `<span style="color: var(--text-secondary); font-size: 12px;">(${ass.deviceType})</span>` : ""}
                         <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Perfil #${ass.profileNumber} • ${ass.durationMonths || 1} mes${(ass.durationMonths || 1) > 1 ? "es" : ""}</div>
                     </div>
                     <div style="text-align: right;">
@@ -1337,19 +2210,83 @@
                         </div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <button onclick="renewEditAssignment(${idx})" class="btn btn-warning" style="flex: 1; padding: 6px; font-size: 11px;">
+                <div style="display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap;">
+                    <button onclick="renewEditAssignment(${idx})" class="btn btn-warning" style="flex: 1 1 45%; padding: 6px; font-size: 11px;">
                         🔄 Renovar
                     </button>
-                    <button onclick="removeEditAssignment(${idx})" class="btn btn-danger" style="flex: 1; padding: 6px; font-size: 11px;">
-                        ❌ Quitar
+                    <button onclick="openChangeExpiryDate(${idx})" class="btn btn-primary" style="flex: 1 1 45%; padding: 6px; font-size: 11px;">
+                        📅 Fecha
                     </button>
-                    <button onclick="moveClientAccount(${idx})" class="btn btn-primary" style="flex: 1; padding: 6px; font-size: 11px;">
+                    <button onclick="moveClientAccount(${idx})" class="btn btn-primary" style="flex: 1 1 45%; padding: 6px; font-size: 11px;">
                         🔀 Mover
+                    </button>
+                    <button onclick="removeEditAssignment(${idx})" class="btn btn-danger" style="flex: 1 1 45%; padding: 6px; font-size: 11px;">
+                        ❌ Quitar
                     </button>
                 </div>
             `;
                 container.appendChild(div);
+            });
+        }
+
+        // ========== Cambiar fecha de vencimiento manualmente (corrección de errores) ==========
+        function openChangeExpiryDate(assignmentIndex) {
+            const client = appData.clients.find((c) => c.pin === editingClientPin);
+            if (!client) return;
+            const ass = client.assignments[assignmentIndex];
+            if (!ass) return;
+
+            changeExpiryAssignmentIndex = assignmentIndex;
+            const config = PLATFORM_CONFIG[ass.platform];
+            document.getElementById("changeExpiryPlatformLabel").textContent =
+                `${config.icon} ${ass.platform}${platformHasSubtypes(ass.platform) ? " (" + ass.deviceType + ")" : ""} — Perfil #${ass.profileNumber}`;
+
+            const dateInput = document.getElementById("changeExpiryDateInput");
+            dateInput.value = new Date(ass.expiryDate).toISOString().split("T")[0];
+
+            document.getElementById("changeExpiryApplyAll").checked = false;
+
+            openModal("changeExpiryModal");
+        }
+
+        function confirmChangeExpiryDate() {
+            const client = appData.clients.find((c) => c.pin === editingClientPin);
+            if (!client || changeExpiryAssignmentIndex === null) return;
+
+            const dateValue = document.getElementById("changeExpiryDateInput").value;
+            if (!dateValue) {
+                alert("⚠️ Elegí una fecha.");
+                return;
+            }
+            const applyAll = document.getElementById("changeExpiryApplyAll").checked;
+
+            const newDate = new Date(dateValue + "T00:00:00");
+            const newIso = newDate.toISOString();
+
+            const targets = applyAll ? client.assignments : [client.assignments[changeExpiryAssignmentIndex]];
+
+            targets.forEach((ass) => {
+                if (!ass) return;
+                ass.expiryDate = newIso;
+
+                const account = appData.accounts.find((a) => {
+                    if (platformHasSubtypes(ass.platform)) {
+                        return a.email === ass.accountEmail && a.platform === ass.platform && a.deviceType === ass.deviceType;
+                    }
+                    return a.email === ass.accountEmail && a.platform === ass.platform;
+                });
+                if (account) {
+                    const profile = account.profiles.find((p) => p.number === ass.profileNumber && p.clientId === client.pin);
+                    if (profile) profile.expiryDate = newIso;
+                }
+            });
+
+            saveData().then(() => {
+                closeModal("changeExpiryModal");
+                changeExpiryAssignmentIndex = null;
+                renderEditCurrentAssignments(client);
+                updateAllViews();
+                showNotification(`✅ Fecha actualizada al ${formatDate(newDate)}`, "success");
             });
         }
 
@@ -1363,8 +2300,8 @@
             const candidates = appData.accounts.filter((a) => {
                 if (a.email === ass.accountEmail && a.platform === ass.platform) return false; // misma cuenta
                 if (a.platform !== ass.platform) return false;
-                if (ass.platform === "Netflix" && a.deviceType !== ass.deviceType) return false;
-                return a.profiles.some((p) => !p.occupied);
+                if (platformHasSubtypes(ass.platform) && a.deviceType !== ass.deviceType) return false;
+                return a.profiles.some(isProfileSellable);
             });
 
             if (candidates.length === 0) {
@@ -1375,7 +2312,7 @@
             // Construir lista de opciones
             let msg = "Selecciona la cuenta destino para mover a " + client.name + ":\n\n";
             candidates.forEach((acc, i) => {
-                const free = acc.profiles.filter((p) => !p.occupied).length;
+                const free = acc.profiles.filter(isProfileSellable).length;
                 msg += (i + 1) + ". " + acc.email + " (" + free + " cupos libres)\n";
             });
             msg += "\nIngresá el número:";
@@ -1389,7 +2326,7 @@
             }
 
             const targetAccount = candidates[choiceIdx];
-            const freeProfile = targetAccount.profiles.find((p) => !p.occupied);
+            const freeProfile = targetAccount.profiles.find(isProfileSellable);
             if (!freeProfile) {
                 alert("⚠️ No se encontró un perfil libre en esa cuenta.");
                 return;
@@ -1397,7 +2334,7 @@
 
             // Liberar perfil en cuenta origen
             const sourceAccount = appData.accounts.find((a) => {
-                if (ass.platform === "Netflix") {
+                if (platformHasSubtypes(ass.platform)) {
                     return a.email === ass.accountEmail && a.platform === ass.platform && a.deviceType === ass.deviceType;
                 }
                 return a.email === ass.accountEmail && a.platform === ass.platform;
@@ -1442,7 +2379,7 @@
             // 🔧 CORRECCIÓN: Buscar la cuenta correcta considerando también el deviceType para Netflix
             const account = appData.accounts.find((a) => {
                 // Para Netflix, debemos coincidir también el deviceType
-                if (assignment.platform === "Netflix") {
+                if (platformHasSubtypes(assignment.platform)) {
                     return a.email === assignment.accountEmail &&
                         a.platform === assignment.platform &&
                         a.deviceType === assignment.deviceType;
@@ -1494,34 +2431,18 @@
             const monthsNum = parseInt(months);
             const assignment = client.assignments[assignmentIndex];
 
-            // 🔧 CORRECCIÓN DEFINITIVA: La fecha base es el MAYOR entre:
-            // 1. El vencimiento actual de la asignación (si aún no venció o recién venció)
-            // 2. La fecha de pago del cliente (si ya venció hace mucho)
-            // 3. Hoy (último recurso)
-
+            // 🔧 La fecha de vencimiento NUNCA se mueve por el día en que el cliente
+            // efectivamente paga. Si debía pagar el 05/07 y paga el 10/07, el nuevo
+            // vencimiento se calcula siempre desde el 05/07 (la fecha que ya tenía
+            // asignada), sin importar cuántos días de atraso tenga. Si una fecha quedó
+            // mal cargada por error, usá el botón "📅 Fecha" para corregirla a mano.
             const currentExpiry = new Date(assignment.expiryDate);
             currentExpiry.setHours(0, 0, 0, 0);
 
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            let baseDate;
-
-            // Si el vencimiento es hoy o futuro, extender desde el vencimiento
-            // (el cliente paga antes de tiempo, no pierde días)
-            if (currentExpiry >= today) {
-                baseDate = new Date(currentExpiry);
-            }
-            // Si venció hace poco (menos de 5 días), dar beneficio de duda y extender desde vencimiento
-            else {
-                const daysExpired = Math.floor((today - currentExpiry) / (1000 * 60 * 60 * 24));
-                if (daysExpired <= 5) {
-                    baseDate = new Date(currentExpiry);
-                } else {
-                    // Venció hace mucho, extender desde hoy (o desde fecha de pago si existe)
-                    baseDate = client.paymentDate ? new Date(client.paymentDate + "T00:00:00") : new Date(today);
-                }
-            }
+            const baseDate = new Date(currentExpiry);
 
             // Calcular nuevo vencimiento sumando los meses a la fecha base
             const newEnd = calculateExpiryDate(baseDate, monthsNum);
@@ -1533,7 +2454,7 @@
 
             // Buscar y actualizar el perfil en la cuenta
             const account = appData.accounts.find((a) => {
-                if (assignment.platform === "Netflix") {
+                if (platformHasSubtypes(assignment.platform)) {
                     return a.email === assignment.accountEmail &&
                         a.platform === assignment.platform &&
                         a.deviceType === assignment.deviceType;
@@ -1564,7 +2485,7 @@
             container.innerHTML = "";
 
             const availableAccounts = appData.accounts.filter((acc) =>
-                acc.profiles.some((p) => !p.occupied),
+                acc.profiles.some(isProfileSellable),
             );
             if (availableAccounts.length === 0) {
                 container.innerHTML = '<p style="color: var(--text-secondary);">No hay perfiles disponibles para agregar.</p>';
@@ -1573,7 +2494,7 @@
 
             const grouped = {};
             availableAccounts.forEach((acc) => {
-                const key = acc.platform === "Netflix" ? `Netflix - ${acc.deviceType}` : acc.platform;
+                const key = platformHasSubtypes(acc.platform) ? `${acc.platform} - ${acc.deviceType}` : acc.platform;
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(acc);
             });
@@ -1583,7 +2504,7 @@
                 const deviceType = accounts[0].deviceType;
                 const config = PLATFORM_CONFIG[platform];
                 const availableCount = accounts.reduce(
-                    (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                    (sum, acc) => sum + acc.profiles.filter(isProfileSellable).length,
                     0,
                 );
 
@@ -1597,7 +2518,7 @@
                         <span style="font-size: 28px;">${config.icon}</span>
                         <div>
                             <div style="font-weight: 700; font-size: 16px;">${platform}</div>
-                            ${platform === "Netflix" ? `<span class="platform-subtype">${deviceType}</span>` : ""}
+                            ${platformHasSubtypes(platform) ? `<span class="platform-subtype">${deviceType}</span>` : ""}
                         </div>
                     </div>
                     <span class="badge badge-success">${availableCount} disponibles</span>
@@ -1627,7 +2548,7 @@
             const accountIds = Array.prototype.slice.call(arguments, 2);
             const accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
             const available = accounts.reduce(
-                (sum, acc) => sum + acc.profiles.filter((p) => !p.occupied).length,
+                (sum, acc) => sum + acc.profiles.filter(isProfileSellable).length,
                 0,
             );
             const container = event.target.closest(".card");
@@ -1639,8 +2560,16 @@
                 return;
             }
 
-            const paymentDateInput = document.getElementById("editClientPaymentDate");
-            const startDate = paymentDateInput.value ? new Date(paymentDateInput.value) : new Date();
+            // 🔧 CORRECCIÓN: la fecha de inicio de una plataforma NUEVA agregada a un
+            // cliente existente debe tomarse del campo independiente
+            // "editNewPlatformsStartDate" (la fecha real en que se está dando de alta
+            // esta nueva contratación), y NO de "editClientPaymentDate" (que refleja la
+            // fecha de pago original del cliente y puede ser muy anterior a hoy).
+            // Antes este código usaba "editClientPaymentDate" por error, lo que hacía
+            // que toda plataforma nueva heredara el vencimiento de la primera, sin
+            // importar qué día se la estuviera agregando.
+            const startDateInput = document.getElementById("editNewPlatformsStartDate");
+            const startDate = startDateInput && startDateInput.value ? new Date(startDateInput.value) : new Date();
             const endDate = calculateExpiryDate(startDate, durationMonths);
             const exactDays = getExactDaysBetween(startDate, endDate);
 
@@ -1767,9 +2696,12 @@
                 <div class="summary-row">
                     <div>
                         ${PLATFORM_CONFIG[item.platform].icon} <strong>${item.platform}</strong> 
-                        ${item.platform === "Netflix" ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
+                        ${platformHasSubtypes(item.platform) ? `<span style="color: var(--text-secondary);">(${item.deviceType})</span>` : ""}
                         <br><small style="color: var(--text-secondary);">
                             ${item.quantity} perfil(es) × ${item.durationMonths} mes${item.durationMonths > 1 ? "es" : ""} × $${item.pricePerProfile.toFixed(2)}
+                        </small>
+                        <br><small style="color: var(--accent-primary);">
+                            📅 ${formatDate(item.startDate)} → ${formatDate(item.endDate)} (${item.durationDays} días)
                         </small>
                         ${itemDisplayDiscount > 0 ? `<span class="discount-badge">AHORRO: $${itemDisplayDiscount.toFixed(2)}</span>` : ""}
                     </div>
@@ -1826,8 +2758,6 @@
             const firstName = document.getElementById("editClientFirstName").value.trim();
             const lastName = document.getElementById("editClientLastName").value.trim();
 
-            const currentDate = new Date().toISOString().split('T')[0];
-
             if (!/^\d{4}$/.test(newPin)) {
                 alert("⚠️ El PIN debe tener exactamente 4 dígitos numéricos");
                 return;
@@ -1863,8 +2793,17 @@
             let totalAdditional = 0;
 
             if (editCurrentCart.length > 0) {
-                client.paymentDate = currentDate;
-                const startDate = new Date(currentDate);
+                // 🔧 CORRECCIÓN: usamos la fecha del campo "Fecha de Inicio de las Nuevas
+                // Plataformas" (la fecha real de esta nueva contratación) tanto para
+                // calcular los vencimientos como para registrar cuándo se cobró este
+                // pago adicional. Ya NO se sobreescribe client.paymentDate (la fecha de
+                // pago ORIGINAL del cliente) con la fecha de hoy: ese campo representa
+                // el primer pago del cliente y debe permanecer intacto.
+                const newPlatformsStartInput = document.getElementById("editNewPlatformsStartDate");
+                const startDateValue = newPlatformsStartInput && newPlatformsStartInput.value
+                    ? newPlatformsStartInput.value
+                    : new Date().toISOString().split("T")[0];
+                const startDate = new Date(startDateValue);
 
                 for (const item of editCurrentCart) {
                     const accounts = appData.accounts.filter((a) => item.accountIds.includes(a.id));
@@ -1874,7 +2813,7 @@
                     for (const acc of accounts) {
                         if (assignedCount >= item.quantity) break;
                         for (let i = acc.profiles.length - 1; i >= 0; i--) {
-                            if (!acc.profiles[i].occupied && assignedCount < item.quantity) {
+                            if (isProfileSellable(acc.profiles[i]) && assignedCount < item.quantity) {
                                 acc.profiles[i].occupied = true;
                                 acc.profiles[i].clientId = client.pin;
                                 acc.profiles[i].expiryDate = endDate.toISOString();
@@ -1950,7 +2889,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <strong style="font-size: 18px; color: var(--accent-danger);">${PLATFORM_CONFIG[ass.platform].icon} ${ass.platform}</strong>
-                        ${ass.platform === "Netflix" ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}<br>
+                        ${platformHasSubtypes(ass.platform) ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}<br>
                         <small style="color: var(--text-secondary);">Perfil #${ass.profileNumber} • ${ass.durationMonths} mes${ass.durationMonths > 1 ? "es" : ""}</small>
                     </div>
                 </div>
@@ -2032,7 +2971,7 @@
                             <strong style="font-size: 16px; color: ${isExpired ? "var(--accent-danger)" : "var(--text-primary)"};">
                                 ${ass.platform}
                             </strong>
-                            ${ass.platform === "Netflix" ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}
+                            ${platformHasSubtypes(ass.platform) ? `<span class="platform-subtype">${ass.deviceType}</span>` : ""}
                         </div>
                         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">
                             👤 Perfil #${ass.profileNumber} • ${ass.durationMonths || 1} mes${(ass.durationMonths || 1) > 1 ? "es" : ""}
@@ -2073,16 +3012,92 @@
             document.getElementById("renewClientName").textContent = client.name;
             document.getElementById("renewClientPin").textContent = client.pin;
 
-            const lastExpiry = new Date(Math.max(...client.assignments.map((a) => new Date(a.expiryDate))));
-            document.getElementById("renewCurrentExpiry").textContent = formatDate(lastExpiry);
-
             document.querySelectorAll(".renewal-option").forEach((opt) => opt.classList.remove("selected"));
             document.getElementById("renewOption1").classList.add("selected");
             document.getElementById("selectedRenewalMonths").value = "1";
 
+            renderRenewExistingList(client);
+            renderRenewAddList(client);
             calculateAndShowRenewalCost();
 
             openModal("renewClientModal");
+        }
+
+        // Lista de plataformas que YA tiene el cliente, con checkbox para renovar
+        function renderRenewExistingList(client) {
+            const container = document.getElementById("renewExistingList");
+            container.innerHTML = "";
+
+            if (!client.assignments || client.assignments.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); margin-bottom: 15px;">Este cliente no tiene plataformas activas.</p>';
+                return;
+            }
+
+            client.assignments.forEach((ass, idx) => {
+                const config = PLATFORM_CONFIG[ass.platform];
+                const row = document.createElement("label");
+                row.className = "renew-item-row checked";
+                row.innerHTML = `
+                    <div class="renew-item-info">
+                        <strong>${config.icon} ${ass.platform}</strong>
+                        ${platformHasSubtypes(ass.platform) ? `<span class="platform-subtype" style="margin-left:6px;">${ass.deviceType}</span>` : ""}
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">Perfil #${ass.profileNumber} • Vence: ${formatDate(ass.expiryDate)}</div>
+                    </div>
+                    <input type="checkbox" class="renew-existing-checkbox" data-idx="${idx}" checked
+                        onchange="this.closest('.renew-item-row').classList.toggle('checked', this.checked); calculateAndShowRenewalCost();">
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // Lista de plataformas disponibles para agregar como NUEVAS junto con la renovación
+        function renderRenewAddList(client) {
+            const container = document.getElementById("renewAddList");
+            container.innerHTML = "";
+
+            const availableAccounts = appData.accounts.filter((acc) => acc.profiles.some(isProfileSellable));
+            if (availableAccounts.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); margin-bottom: 15px;">No hay perfiles disponibles para agregar.</p>';
+                return;
+            }
+
+            const grouped = {};
+            availableAccounts.forEach((acc) => {
+                const key = platformHasSubtypes(acc.platform) ? `${acc.platform} - ${acc.deviceType}` : acc.platform;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(acc);
+            });
+
+            Object.entries(grouped).forEach(([key, accounts]) => {
+                const platform = accounts[0].platform;
+                const deviceType = accounts[0].deviceType || "";
+                const config = PLATFORM_CONFIG[platform];
+                const availableCount = accounts.reduce(
+                    (sum, acc) => sum + acc.profiles.filter(isProfileSellable).length,
+                    0,
+                );
+                const accountIds = accounts.map((a) => a.id).join(",");
+
+                const row = document.createElement("div");
+                row.className = "renew-item-row";
+                row.innerHTML = `
+                    <div class="renew-item-info">
+                        <strong>${config.icon} ${platform}</strong>
+                        ${platformHasSubtypes(platform) ? `<span class="platform-subtype" style="margin-left:6px;">${deviceType}</span>` : ""}
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${availableCount} disponibles</div>
+                    </div>
+                    <input type="number" class="renew-add-qty" data-platform="${platform}" data-device="${deviceType}" data-account-ids="${accountIds}" value="1" min="1" max="${availableCount}" disabled style="width: 55px; text-align: center; margin-right: 10px;" onchange="calculateAndShowRenewalCost()">
+                    <input type="checkbox" class="renew-add-checkbox" data-platform="${platform}" data-device="${deviceType}" data-account-ids="${accountIds}"
+                        onchange="
+                            const row = this.closest('.renew-item-row');
+                            const qtyInput = row.querySelector('.renew-add-qty');
+                            qtyInput.disabled = !this.checked;
+                            row.classList.toggle('checked', this.checked);
+                            calculateAndShowRenewalCost();
+                        ">
+                `;
+                container.appendChild(row);
+            });
         }
 
         function selectRenewalMonths(months) {
@@ -2096,34 +3111,49 @@
             calculateAndShowRenewalCost();
         }
 
+        // Junta lo tildado para renovar + lo tildado para agregar y calcula el costo combinado.
+        // El descuento por cantidad de plataformas se calcula sobre el conjunto de las DOS listas,
+        // así renovar 2 y agregar 1 nueva (misma duración = misma categoría) cuenta como 3 plataformas.
         function calculateAndShowRenewalCost() {
             const client = appData.clients.find((c) => c.pin === currentRenewPin);
             if (!client) return;
 
             const months = selectedRenewalMonths;
-            let platformCounts = {};
 
-            client.assignments.forEach((ass) => {
-                const key = ass.platform === "Netflix" ? `Netflix-${ass.deviceType}` : ass.platform;
+            const renewChecks = Array.from(document.querySelectorAll(".renew-existing-checkbox:checked"));
+            const renewIdxs = renewChecks.map((el) => parseInt(el.dataset.idx));
+            const renewAssignments = renewIdxs.map((idx) => client.assignments[idx]).filter(Boolean);
+
+            let platformCounts = {};
+            renewAssignments.forEach((ass) => {
+                const key = platformHasSubtypes(ass.platform) ? `${ass.platform}-${ass.deviceType}` : ass.platform;
                 if (!platformCounts[key]) {
                     platformCounts[key] = { platform: ass.platform, deviceType: ass.deviceType, count: 0, price: 0 };
                 }
                 platformCounts[key].count++;
             });
 
+            const addChecks = Array.from(document.querySelectorAll(".renew-add-checkbox:checked"));
+            addChecks.forEach((chk) => {
+                const platform = chk.dataset.platform;
+                const deviceType = chk.dataset.device || null;
+                const qtyInput = chk.closest(".renew-item-row").querySelector(".renew-add-qty");
+                const qty = parseInt(qtyInput.value) || 1;
+                const key = platformHasSubtypes(platform) ? `${platform}-${deviceType}` : platform;
+                if (!platformCounts[key]) {
+                    platformCounts[key] = { platform, deviceType, count: 0, price: 0 };
+                }
+                platformCounts[key].count += qty;
+            });
+
             Object.keys(platformCounts).forEach((key) => {
                 const info = platformCounts[key];
                 const account = appData.accounts.find((a) =>
                     a.platform === info.platform &&
-                    (info.platform !== "Netflix" || a.deviceType === info.deviceType)
+                    (!platformHasSubtypes(info.platform) || a.deviceType === info.deviceType)
                 );
                 if (account) info.price = account.pricePerProfile;
             });
-
-            // ===== SEPARAR POR CATEGORÍA =====
-            // En renovación, todos los items tienen la misma duración (months)
-            // Si months === 3 → descuento por TIEMPO
-            // Si months === 1 → posible descuento por CANTIDAD
 
             let subtotal = 0;
             Object.values(platformCounts).forEach((info) => {
@@ -2143,7 +3173,7 @@
                 discountText = " (10% OFF por 3 meses)";
                 discountDetails.push({ label: "Descuento por Tiempo (3 meses)", amount: discount, color: "var(--warning)" });
             } else if (months === 1) {
-                // Solo aplica descuento por CANTIDAD
+                // Solo aplica descuento por CANTIDAD (misma categoría: 1 mes)
                 let platformDiscountRate = 0;
                 let platformDiscountLabel = "";
                 if (distinctPlatforms >= 7) {
@@ -2174,19 +3204,37 @@
             const total = subtotal - discount;
             renewalCostPreview = total;
 
-            updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails);
+            updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails, renewAssignments, distinctPlatforms, totalProfiles);
         }
 
-        function updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails) {
+        function updateRenewalSummaryWithPrice(subtotal, discount, total, months, discountText, discountDetails, renewAssignments, distinctPlatforms, totalProfiles) {
             const client = appData.clients.find((c) => c.pin === currentRenewPin);
             if (!client) return;
 
-            const lastExpiry = new Date(Math.max(...client.assignments.map((a) => new Date(a.expiryDate))));
-            const baseDate = lastExpiry > new Date() ? lastExpiry : new Date();
-            const newEnd = calculateExpiryDate(baseDate, months);
+            // 🔧 La fecha base es SIEMPRE la que ya tenían las plataformas tildadas para
+            // renovar (nunca se mueve por el día en que el cliente paga). Si no se tildó
+            // ninguna para renovar (solo se está agregando algo nuevo), se toma como
+            // referencia el vencimiento más lejano que ya tiene el cliente, para que lo
+            // nuevo quede sincronizado con su ciclo actual.
+            const refAssignments = (renewAssignments && renewAssignments.length > 0) ? renewAssignments : client.assignments;
+            let baseDate = (refAssignments && refAssignments.length > 0)
+                ? new Date(Math.max(...refAssignments.map((a) => new Date(a.expiryDate))))
+                : new Date();
+            baseDate.setHours(0, 0, 0, 0);
+
+            const currentExpiryEl = document.getElementById("renewCurrentExpiry");
+            if (currentExpiryEl) currentExpiryEl.textContent = formatDate(baseDate);
 
             const summary = document.getElementById("renewalSummary");
+
+            if (!subtotal || subtotal === 0) {
+                summary.style.display = "none";
+                return;
+            }
+
             summary.style.display = "block";
+
+            const newEnd = calculateExpiryDate(baseDate, months);
 
             let discountHtml = "";
             if (discountDetails && discountDetails.length > 0) {
@@ -2212,6 +3260,10 @@
                 💰 Resumen de Renovación
             </h4>
             <div class="detail-row">
+                <span class="detail-label">Plataformas incluidas:</span>
+                <span class="detail-value">${distinctPlatforms} (${totalProfiles} perfil${totalProfiles === 1 ? "" : "es"})</span>
+            </div>
+            <div class="detail-row">
                 <span class="detail-label">Duración:</span>
                 <span class="detail-value">${months} mes${months > 1 ? "es" : ""}${discountText}</span>
             </div>
@@ -2227,7 +3279,7 @@
                 </span>
             </div>
             <div class="detail-row" style="margin-top: 15px;">
-                <span class="detail-label">Nueva fecha de vencimiento:</span>
+                <span class="detail-label">Nueva fecha de vencimiento (todo junto):</span>
                 <span class="detail-value" style="color: var(--accent-success); font-weight: 700;">
                     ${formatDate(newEnd)}
                 </span>
@@ -2249,51 +3301,71 @@
                 return;
             }
 
-            // 🔧 CORRECCIÓN DEFINITIVA: Para renovación completa, la fecha base es:
-            // El vencimiento más lejano entre todas las asignaciones activas
-            // Si ya todo venció, usar hoy (o fecha de pago)
+            const renewChecks = Array.from(document.querySelectorAll(".renew-existing-checkbox:checked"));
+            const renewIdxs = renewChecks.map((el) => parseInt(el.dataset.idx));
+            const renewAssignments = renewIdxs.map((idx) => client.assignments[idx]).filter(Boolean);
 
+            const addChecks = Array.from(document.querySelectorAll(".renew-add-checkbox:checked"));
+
+            if (renewAssignments.length === 0 && addChecks.length === 0) {
+                alert("⚠️ Tildá al menos una plataforma para renovar o para agregar.");
+                return;
+            }
+
+            // Validar cupos disponibles de lo nuevo ANTES de cobrar nada
+            const addItems = [];
+            for (const chk of addChecks) {
+                const platform = chk.dataset.platform;
+                const deviceType = chk.dataset.device || null;
+                const accountIds = chk.dataset.accountIds.split(",").filter(Boolean).map(Number);
+                const qtyInput = chk.closest(".renew-item-row").querySelector(".renew-add-qty");
+                const qty = parseInt(qtyInput.value) || 1;
+
+                const accounts = appData.accounts.filter((a) => accountIds.includes(a.id));
+                const available = accounts.reduce((sum, acc) => sum + acc.profiles.filter(isProfileSellable).length, 0);
+                if (qty > available) {
+                    alert(`⚠️ Solo hay ${available} perfil(es) disponible(s) de ${platform}${deviceType ? " (" + deviceType + ")" : ""}`);
+                    return;
+                }
+                addItems.push({ platform, deviceType, qty, accounts });
+            }
+
+            // 🔧 Fecha base: SIEMPRE la que ya tenían las plataformas tildadas para
+            // renovar. Nunca se mueve por el día en que el cliente efectivamente paga.
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // Encontrar el vencimiento más lejano
-            const lastExpiry = new Date(Math.max(...client.assignments.map((a) => new Date(a.expiryDate))));
-            lastExpiry.setHours(0, 0, 0, 0);
-
-            let baseDate;
-
-            // Si el último vencimiento es hoy o futuro, extender desde ahí
-            if (lastExpiry >= today) {
-                baseDate = lastExpiry;
-            } else {
-                // Si venció hace poco (grace period de 5 días)
-                const daysExpired = Math.floor((today - lastExpiry) / (1000 * 60 * 60 * 24));
-                if (daysExpired <= 5) {
-                    baseDate = lastExpiry;
-                } else {
-                    // Venció hace mucho, usar hoy
-                    baseDate = today;
-                }
-            }
+            const refAssignments = renewAssignments.length > 0 ? renewAssignments : client.assignments;
+            let baseDate = (refAssignments && refAssignments.length > 0)
+                ? new Date(Math.max(...refAssignments.map((a) => new Date(a.expiryDate))))
+                : new Date(today);
+            baseDate.setHours(0, 0, 0, 0);
 
             const newEnd = calculateExpiryDate(baseDate, months);
+            const durationDays = getExactDaysBetween(baseDate, newEnd);
 
-            // ... cálculo de costos se mantiene igual ...
+            // ... cálculo de costos ...
             let platformCounts = {};
-            client.assignments.forEach((ass) => {
-                const key = ass.platform === "Netflix" ? `Netflix-${ass.deviceType}` : ass.platform;
+            renewAssignments.forEach((ass) => {
+                const key = platformHasSubtypes(ass.platform) ? `${ass.platform}-${ass.deviceType}` : ass.platform;
                 if (!platformCounts[key]) {
-                    platformCounts[key] = { count: 0, price: 0 };
+                    platformCounts[key] = { platform: ass.platform, deviceType: ass.deviceType, count: 0, price: 0 };
                 }
                 platformCounts[key].count++;
+            });
+            addItems.forEach((item) => {
+                const key = platformHasSubtypes(item.platform) ? `${item.platform}-${item.deviceType}` : item.platform;
+                if (!platformCounts[key]) {
+                    platformCounts[key] = { platform: item.platform, deviceType: item.deviceType, count: 0, price: 0 };
+                }
+                platformCounts[key].count += item.qty;
             });
 
             Object.keys(platformCounts).forEach((key) => {
                 const info = platformCounts[key];
-                const [platform, deviceType] = key.includes('-') ? key.split('-') : [key, null];
                 const account = appData.accounts.find((a) =>
-                    a.platform === platform &&
-                    (platform !== "Netflix" || a.deviceType === deviceType)
+                    a.platform === info.platform &&
+                    (!platformHasSubtypes(info.platform) || a.deviceType === info.deviceType)
                 );
                 if (account) info.price = account.pricePerProfile;
             });
@@ -2330,28 +3402,29 @@
 
             const confirmMessage = `¿Confirmar renovación?\n\n` +
                 `Cliente: ${client.name}\n` +
-                `Vencimiento actual: ${formatDate(lastExpiry)}\n` +
+                `Plataformas incluidas: ${distinctPlatforms} (${totalProfiles} perfiles)\n` +
                 `Renovar desde: ${formatDate(baseDate)}\n` +
                 `Duración: ${months} mes(es)\n` +
                 (discount > 0 ? `Subtotal: $${subtotal.toFixed(2)}\nDescuento: -$${discount.toFixed(2)} (${discountDetails.join(", ")})\n` : ``) +
-                `Monto a cobrar: $${renewalCost.toFixed(2)}\n\n` +
+                `Monto a cobrar: $${renewalCost.toFixed(2)}\n` +
+                `Nueva fecha (para todo lo incluido): ${formatDate(newEnd)}\n\n` +
                 `¿Proceder?`;
 
             if (!confirm(confirmMessage)) return;
 
             client.totalPaid = renewalCost;
-            // Actualizar fecha de pago a hoy
+            // Actualizar fecha de ÚLTIMO PAGO a hoy (solo a fines de registro, no se usa para calcular vencimientos)
             client.paymentDate = today.toISOString().split('T')[0];
 
-            // Aplicar la nueva fecha a TODAS las asignaciones
-            client.assignments.forEach((ass) => {
+            // Aplicar la nueva fecha a las asignaciones tildadas para renovar
+            renewAssignments.forEach((ass) => {
                 ass.expiryDate = newEnd.toISOString();
                 ass.durationMonths = months;
                 ass.startDate = baseDate.toISOString();
-                ass.durationDays = getExactDaysBetween(baseDate, newEnd);
+                ass.durationDays = durationDays;
 
                 const account = appData.accounts.find((a) => {
-                    if (ass.platform === "Netflix") {
+                    if (platformHasSubtypes(ass.platform)) {
                         return a.email === ass.accountEmail &&
                             a.platform === ass.platform &&
                             a.deviceType === ass.deviceType;
@@ -2367,6 +3440,36 @@
                     if (profile) profile.expiryDate = newEnd.toISOString();
                 }
             });
+
+            // Agregar las plataformas nuevas tildadas, sincronizadas a la misma fecha
+            addItems.forEach((item) => {
+                let remaining = item.qty;
+                for (const account of item.accounts) {
+                    if (remaining <= 0) break;
+                    const freeProfiles = account.profiles.filter(isProfileSellable);
+                    for (const profile of freeProfiles) {
+                        if (remaining <= 0) break;
+                        profile.occupied = true;
+                        profile.clientId = client.pin;
+                        profile.expiryDate = newEnd.toISOString();
+
+                        client.assignments.push({
+                            platform: item.platform,
+                            deviceType: item.deviceType,
+                            accountEmail: account.email,
+                            password: account.password,
+                            profileNumber: profile.number,
+                            durationMonths: months,
+                            durationDays: durationDays,
+                            startDate: baseDate.toISOString(),
+                            expiryDate: newEnd.toISOString(),
+                        });
+                        remaining--;
+                    }
+                }
+            });
+
+            client.active = true;
 
             saveData().then(() => {
                 closeModal('renewClientModal');
@@ -2507,12 +3610,15 @@
 
             const summary = {};
             appData.accounts.forEach((acc) => {
-                const key = acc.platform === "Netflix" ? `Netflix - ${acc.deviceType}` : acc.platform;
+                const key = platformHasSubtypes(acc.platform) ? `${acc.platform} - ${acc.deviceType}` : acc.platform;
                 if (!summary[key]) {
-                    summary[key] = { total: 0, available: 0, icon: PLATFORM_CONFIG[acc.platform].icon, color: PLATFORM_CONFIG[acc.platform].color };
+                    const cfg = PLATFORM_CONFIG[acc.platform] || { icon: "📺", color: "custom-platform" };
+                    summary[key] = { total: 0, available: 0, occupied: 0, blocked: 0, config: cfg, platform: acc.platform };
                 }
                 summary[key].total += acc.maxProfiles;
-                summary[key].available += acc.profiles.filter((p) => !p.occupied).length;
+                summary[key].available += acc.profiles.filter(isProfileSellable).length;
+                summary[key].occupied += acc.profiles.filter((p) => p.occupied).length;
+                summary[key].blocked += acc.profiles.filter((p) => !p.occupied && p.blocked).length;
             });
 
             Object.entries(summary).forEach(([key, data]) => {
@@ -2521,7 +3627,7 @@
                 card.innerHTML = `
                 <div class="platform-header">
                     <div class="platform-name">
-                        <div class="platform-icon ${data.color}">${data.icon}</div>
+                        ${platformIconHtml(data.config, data.platform)}
                         <div style="font-size: 14px;">${key}</div>
                     </div>
                 </div>
@@ -2529,7 +3635,9 @@
                     <div style="font-size: 36px; font-weight: 800; color: var(--accent-primary);">${data.available}</div>
                     <div style="color: var(--text-secondary); font-size: 12px;">disponibles de ${data.total}</div>
                 </div>
-                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: var(--text-secondary);">Ocupados: ${data.total - data.available}</div>
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: var(--text-secondary);">
+                    Ocupados: ${data.occupied}${data.blocked > 0 ? ` • 🔒 Sin vender: ${data.blocked}` : ""}
+                </div>
             `;
                 dashboardAccounts.appendChild(card);
             });
@@ -2631,32 +3739,33 @@
 
             select.innerHTML = '<option value="">Selecciona una cuenta...</option>';
 
-            const netflixByEmail = {};
+            const subtypeAccountsByPlatform = {};
             const otherAccounts = [];
 
             appData.accounts.forEach((acc) => {
-                if (acc.platform === "Netflix") {
-                    if (!netflixByEmail[acc.email]) netflixByEmail[acc.email] = [];
-                    netflixByEmail[acc.email].push(acc);
+                if (platformHasSubtypes(acc.platform)) {
+                    if (!subtypeAccountsByPlatform[acc.platform]) subtypeAccountsByPlatform[acc.platform] = {};
+                    if (!subtypeAccountsByPlatform[acc.platform][acc.email]) subtypeAccountsByPlatform[acc.platform][acc.email] = [];
+                    subtypeAccountsByPlatform[acc.platform][acc.email].push(acc);
                 } else {
                     otherAccounts.push(acc);
                 }
             });
 
-            if (Object.keys(netflixByEmail).length > 0) {
-                const netflixGroup = document.createElement("optgroup");
-                netflixGroup.label = "🎬 Netflix (por cuenta de correo)";
-                Object.entries(netflixByEmail).forEach(([email, accounts]) => {
+            Object.entries(subtypeAccountsByPlatform).forEach(([platform, byEmail]) => {
+                const platformGroup = document.createElement("optgroup");
+                platformGroup.label = `${PLATFORM_CONFIG[platform].icon} ${platform} (por cuenta de correo)`;
+                Object.entries(byEmail).forEach(([email, accounts]) => {
                     const totalCost = accounts.reduce((sum, a) => sum + a.cost, 0);
                     const types = accounts.map((a) => a.deviceType).join(" + ");
                     const option = document.createElement("option");
                     option.value = accounts[0].id;
-                    option.dataset.netflixGroup = JSON.stringify(accounts.map((a) => a.id));
+                    option.dataset.subtypeGroup = JSON.stringify(accounts.map((a) => a.id));
                     option.textContent = `${email} (${types}) - $${totalCost.toFixed(2)}/mes`;
-                    netflixGroup.appendChild(option);
+                    platformGroup.appendChild(option);
                 });
-                select.appendChild(netflixGroup);
-            }
+                select.appendChild(platformGroup);
+            });
 
             if (otherAccounts.length > 0) {
                 const otherGroup = document.createElement("optgroup");
@@ -2710,13 +3819,16 @@
                     div.style.cssText = `padding: 12px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 8px; font-size: 12px; border-left: 3px solid ${acc.daysLeft <= 3 ? "var(--accent-danger)" : acc.daysLeft <= 7 ? "var(--warning)" : "var(--accent-primary)"}`;
                     div.innerHTML = `
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="font-weight: 600;">${acc.platform} ${acc.platform === "Netflix" ? `(${acc.deviceType})` : ""}</span>
+                        <span style="font-weight: 600;">${acc.platform} ${platformHasSubtypes(acc.platform) ? `(${acc.deviceType})` : ""}</span>
                         <span style="color: ${acc.daysLeft <= 3 ? "var(--accent-danger)" : acc.daysLeft <= 7 ? "var(--warning)" : "var(--accent-primary)"}; font-weight: 700;">
                             ${acc.daysLeft} días
                         </span>
                     </div>
-                    <div style="color: var(--text-secondary); margin-top: 4px;">
-                        $${acc.cost.toFixed(2)} • <span class="date-display">${formatDate(acc.nextPayment)}</span>
+                    <div style="color: var(--text-secondary); margin-top: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <span>$${acc.cost.toFixed(2)} • <span class="date-display">${formatDate(acc.nextPayment)}</span></span>
+                        <button type="button" class="btn btn-danger" onclick="quickPayAccount(${acc.id})" style="padding: 5px 10px; font-size: 11px; white-space: nowrap;">
+                            💳 Marcar Pagado
+                        </button>
                     </div>
                 `;
                     upcoming.appendChild(div);
@@ -2726,6 +3838,44 @@
             }
         }
 
+        // Registrar el pago de UNA cuenta directamente desde "Próximos Pagos", sin tener
+        // que ir hasta el formulario de "Registrar Pago de Cuentas" y volver a elegirla.
+        function quickPayAccount(accountId) {
+            const account = appData.accounts.find((a) => a.id === accountId);
+            if (!account) return;
+
+            const label = `${account.platform}${platformHasSubtypes(account.platform) ? " (" + account.deviceType + ")" : ""} — ${account.email}`;
+            const amountStr = prompt(`💳 Registrar pago de:\n${label}\n\nMonto a pagar:`, account.cost.toFixed(2));
+            if (amountStr === null) return;
+
+            const amount = parseFloat(amountStr);
+            if (isNaN(amount) || amount <= 0) {
+                alert("⚠️ Monto inválido");
+                return;
+            }
+
+            const today = new Date();
+            const dateStr = today.toISOString().split("T")[0];
+            const nextPayment = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+            appData.payments.push({
+                id: Date.now(),
+                accountId: account.id,
+                platform: account.platform,
+                email: account.email,
+                amount: amount,
+                date: dateStr,
+                nextPayment: nextPayment,
+            });
+            account.nextPayment = nextPayment;
+
+            saveData().then(() => {
+                updateFinanceView();
+                renderAccounts();
+                showNotification(`✅ Pago registrado: ${label} — $${amount.toFixed(2)}`, "success");
+            });
+        }
+
         document.getElementById("paymentForm").addEventListener("submit", function (e) {
             e.preventDefault();
 
@@ -2733,8 +3883,8 @@
             const selectedOption = select.options[select.selectedIndex];
             let accountIds = [];
 
-            if (selectedOption.dataset.netflixGroup) {
-                accountIds = JSON.parse(selectedOption.dataset.netflixGroup);
+            if (selectedOption.dataset.subtypeGroup) {
+                accountIds = JSON.parse(selectedOption.dataset.subtypeGroup);
             } else {
                 accountIds = [parseInt(select.value)];
             }
@@ -2772,8 +3922,11 @@
         function updateAllViews() {
             updateDashboard();
             renderAccounts();
+            renderPlatformFilterButtons();
             renderClients();
             updateFinanceView();
+            populatePlatformSelect();
+            renderCustomPlatformsCatalog();
         }
 
         window.onclick = function (event) {
