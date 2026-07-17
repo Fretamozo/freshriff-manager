@@ -62,6 +62,9 @@
                     <button class="nav-tab" onclick="showSection('accounts')">
                         📺 Cuentas
                     </button>
+                    <button class="nav-tab" onclick="showSection('platformsCatalog')">
+                        🧩 Plataformas
+                    </button>
                     <button class="nav-tab" onclick="showSection('clients')">
                         👥 Clientes
                     </button>
@@ -144,6 +147,26 @@
                 </div>
             </section>
 
+            <!-- CATÁLOGO DE PLATAFORMAS -->
+            <section id="platformsCatalog" class="section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="section-title">🧩 Catálogo de Plataformas</h2>
+                        <button class="btn btn-success" onclick="openModal('newPlatformModal')">
+                            + Nueva Plataforma
+                        </button>
+                    </div>
+                    <div class="info-box">
+                        <strong>💡 ¿Para qué sirve esto?</strong><br />
+                        Acá agregás nuevos servicios de streaming (además de los que ya vienen
+                        incluidos: Netflix, Disney+, Prime Video, etc). Una vez que creás una
+                        plataforma, va a aparecer disponible para elegir cuando registres una
+                        cuenta nueva en "📺 Cuentas".
+                    </div>
+                    <div class="accounts-grid" id="customPlatformsGrid" style="margin-top: 20px"></div>
+                </div>
+            </section>
+
             <!-- CLIENTES -->
             <section id="clients" class="section">
                 <div style="margin-bottom: 20px">
@@ -156,13 +179,10 @@
                     <h2 class="section-title">👥 Buscar Clientes</h2>
                     <div class="search-box">
                         <span class="search-icon">🔍</span>
-                        <input type="text" id="clientSearch" placeholder="Buscar por nombre, apellido o PIN..."
+                        <input type="text" id="clientSearch" placeholder="Buscar por nombre, apellido, PIN o plataforma..."
                             onkeyup="searchClients()" />
                     </div>
-                    <div class="sort-indicator" onclick="toggleSort()">
-                        <span id="sortIcon">📋</span>
-                        <span id="sortText">Ordenar por Apellido (A-Z)</span>
-                    </div>
+                    <div id="platformFilterButtons" style="display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0;"></div>
                     <div id="searchResults" style="display: none">
                         <h3 style="margin-bottom: 15px">Resultados de Búsqueda</h3>
                         <div id="searchResultsList"></div>
@@ -172,10 +192,10 @@
                         <thead>
                             <tr>
                                 <th>PIN</th>
-                                <th>Apellido, Nombre</th>
-                                <th>Plataformas</th>
-                                <th>Vencimiento</th>
-                                <th>Estado</th>
+                                <th>Apellido, Nombre <button type="button" class="sort-btn" id="sortBtn-lastName" onclick="handleSortButtonClick('lastName')" title="Ordenar por apellido">⇅</button></th>
+                                <th>Plataformas <button type="button" class="sort-btn" id="sortBtn-platform" onclick="handleSortButtonClick('platform')" title="Ordenar por plataforma">⇅</button></th>
+                                <th>Vencimiento <button type="button" class="sort-btn" id="sortBtn-expiry" onclick="handleSortButtonClick('expiry')" title="Ordenar por vencimiento">⇅</button></th>
+                                <th>Estado <button type="button" class="sort-btn" id="sortBtn-estado" onclick="handleSortButtonClick('estado')" title="Ordenar por estado">⇅</button></th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -265,6 +285,123 @@
             </section>
         </div>
 
+        <!-- Modal Nueva Plataforma (Catálogo) -->
+        <div id="newPlatformModal" class="modal">
+            <div class="modal-content" style="max-width: 500px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-success)">🧩 Nueva Plataforma</h2>
+                    <button class="close-btn" onclick="closeModal('newPlatformModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="newPlatformForm">
+                    <div class="form-group">
+                        <label class="field-label-required">Nombre de la Plataforma</label>
+                        <input type="text" id="newPlatformName" required placeholder="Ej: MioTV" />
+                        <small style="color: var(--text-secondary)">Así va a aparecer en todos los listados</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Cantidad de Perfiles</label>
+                        <input type="number" id="newPlatformProfiles" required min="1" max="20" placeholder="Ej: 5" />
+                        <small style="color: var(--text-secondary)">Cuántos perfiles tiene cada cuenta de esta
+                            plataforma</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Ícono (emoji, opcional)</label>
+                        <input type="text" id="newPlatformIcon" maxlength="4" placeholder="📡" />
+                        <small style="color: var(--text-secondary)">Dejar en blanco para usar 📺 por defecto</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Color del Ícono</label>
+                        <input type="color" id="newPlatformColor" value="#3b82f6" style="height: 50px; padding: 6px;" />
+                    </div>
+                    <div class="form-group">
+                        <label>Logo (imagen, opcional)</label>
+                        <input type="file" id="newPlatformLogoFile" accept="image/*" onchange="handleNewPlatformLogoChange(this)" />
+                        <small style="color: var(--text-secondary)">Si subís una imagen, se usa en vez del emoji en
+                            toda la app</small>
+                        <div id="newPlatformLogoPreviewWrap" style="display: none; margin-top: 8px;">
+                            <img id="newPlatformLogoPreview" src="" alt="Logo"
+                                style="width: 60px; height: 60px; object-fit: contain; background: #fff; border-radius: 8px; padding: 6px;" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Precio de Venta por Defecto (opcional)</label>
+                        <input type="number" id="newPlatformPrice" step="0.01" placeholder="Ej: 2500" />
+                        <small style="color: var(--text-secondary)">Se precarga solo al crear una cuenta nueva de
+                            esta plataforma</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Costo por Defecto (opcional)</label>
+                        <input type="number" id="newPlatformCost" step="0.01" placeholder="Ej: 1000" />
+                    </div>
+                    <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 10px">
+                        Guardar Plataforma
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal Editar Plataforma (Catálogo) -->
+        <div id="editPlatformCatalogModal" class="modal">
+            <div class="modal-content" style="max-width: 500px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-primary)">✏️ Editar Plataforma</h2>
+                    <button class="close-btn" onclick="closeModal('editPlatformCatalogModal')">
+                        &times;
+                    </button>
+                </div>
+                <form id="editPlatformCatalogForm">
+                    <input type="hidden" id="editPlatformCatalogId" />
+                    <div class="form-group">
+                        <label class="field-label-required">Nombre de la Plataforma</label>
+                        <input type="text" id="editPlatformCatalogName" required placeholder="Ej: MioTV" />
+                    </div>
+                    <div class="form-group">
+                        <label class="field-label-required">Cantidad de Perfiles</label>
+                        <input type="number" id="editPlatformCatalogProfiles" required min="1" max="20" />
+                        <small style="color: var(--text-secondary)">Si ya hay cuentas creadas con esta plataforma,
+                            cambiar este número no modifica cuentas existentes, solo las nuevas que crees</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Ícono (emoji)</label>
+                        <input type="text" id="editPlatformCatalogIcon" maxlength="4" />
+                    </div>
+                    <div class="form-group">
+                        <label>Color del Ícono</label>
+                        <input type="color" id="editPlatformCatalogColor" style="height: 50px; padding: 6px;" />
+                    </div>
+                    <div class="form-group">
+                        <label>Logo (imagen, opcional)</label>
+                        <input type="file" id="editPlatformCatalogLogoFile" accept="image/*" onchange="handleEditPlatformLogoChange(this)" />
+                        <div id="editPlatformCatalogLogoPreviewWrap" style="display: none; align-items: center; gap: 10px; margin-top: 8px;">
+                            <img id="editPlatformCatalogLogoPreview" src="" alt="Logo"
+                                style="width: 60px; height: 60px; object-fit: contain; background: #fff; border-radius: 8px; padding: 6px;" />
+                            <button type="button" class="btn btn-secondary" onclick="removeEditPlatformLogo()" style="padding: 6px 12px; font-size: 12px;">
+                                🗑️ Quitar logo
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Precio de Venta por Defecto (opcional)</label>
+                        <input type="number" id="editPlatformCatalogPrice" step="0.01" />
+                    </div>
+                    <div class="form-group">
+                        <label>Costo por Defecto (opcional)</label>
+                        <input type="number" id="editPlatformCatalogCost" step="0.01" />
+                    </div>
+                    <div style="display: flex; gap: 15px; margin-top: 20px">
+                        <button type="submit" class="btn btn-primary" style="flex: 2">
+                            💾 Guardar Cambios
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="deleteCustomPlatform()" style="flex: 1">
+                            🗑️ Eliminar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Modal Nueva Cuenta -->
         <div id="accountModal" class="modal">
             <div class="modal-content">
@@ -289,6 +426,7 @@
                             <option value="Apple TV+">Apple TV+</option>
                             <option value="Paramount+">Paramount+</option>
                         </select>
+                        <!-- Las plataformas personalizadas del catálogo se agregan acá dinámicamente -->
                     </div>
 
                     <div class="form-group" id="deviceTypeContainer" style="
@@ -298,19 +436,17 @@
                   border-radius: 10px;
                   border: 2px solid rgba(229, 9, 20, 0.3);
                 ">
-                        <label class="field-label-required" style="color: #e50914">Tipo de Dispositivo Netflix *</label>
+                        <label class="field-label-required" id="deviceTypeLabel" style="color: #e50914">Tipo/Categoría *</label>
                         <select id="accDeviceType" required onchange="validateDeviceType()">
                             <option value="">Selecciona el tipo...</option>
-                            <option value="Smart TV">Smart TV (3 perfiles)</option>
-                            <option value="Móvil/PC">Móvil y PC (4 perfiles)</option>
                         </select>
                         <small style="
                     color: var(--text-secondary);
                     display: block;
                     margin-top: 5px;
                   ">
-                            Obligatorio para Netflix. Si tienes ambos tipos con el mismo
-                            email, regístralos por separado.
+                            Obligatorio para esta plataforma. Si tenés varias categorías con el
+                            mismo email, registralas por separado.
                         </small>
                     </div>
 
@@ -537,10 +673,11 @@
                             <small style="color: var(--text-secondary)">Debe ser único de 4 dígitos</small>
                         </div>
                         <div class="form-group">
-                            <label class="field-label-required">Fecha de Pago</label>
+                            <label class="field-label-required">Fecha de Pago Original</label>
                             <input type="date" id="editClientPaymentDate" required
                                 onchange="updateEditDatePreviews()" />
-                            <small style="color: var(--text-secondary)">Fecha en que el cliente realizó el pago</small>
+                            <small style="color: var(--text-secondary)">Fecha del primer pago del cliente (no se usa
+                                para calcular el vencimiento de plataformas nuevas)</small>
                         </div>
                     </div>
 
@@ -560,6 +697,22 @@
                 ">
                         ➕ Agregar Nuevas Plataformas
                     </h3>
+
+                    <div class="form-group" style="
+                  background: rgba(16, 185, 129, 0.05);
+                  border: 2px solid rgba(16, 185, 129, 0.3);
+                  border-radius: 10px;
+                  padding: 15px;
+                ">
+                        <label class="field-label-required" style="color: var(--accent-success)">📅 Fecha de Inicio de las
+                            Nuevas Plataformas</label>
+                        <input type="date" id="editNewPlatformsStartDate" required
+                            onchange="updateEditPriceSummary()" />
+                        <small style="color: var(--text-secondary)">El vencimiento de las plataformas que agregues
+                            ahora se calculará desde esta fecha (normalmente, el día en que el cliente paga por
+                            esta nueva contratación)</small>
+                    </div>
+
                     <div id="editPlatformSelection"></div>
 
                     <div class="summary-box" id="editPriceSummary" style="display: none">
@@ -668,8 +821,9 @@
         </div>
 
         <!-- Modal Renovar Suscripción -->
+        <!-- Modal Renovar Suscripción -->
         <div id="renewClientModal" class="modal">
-            <div class="modal-content" style="max-width: 500px">
+            <div class="modal-content" style="max-width: 640px">
                 <div class="modal-header">
                     <h2 style="color: var(--warning)">🔄 Renovar Suscripción</h2>
                     <button class="close-btn" onclick="closeModal('renewClientModal')">
@@ -693,24 +847,37 @@
                 </div>
 
                 <div class="info-box" style="margin-bottom: 20px">
-                    <strong>📅 Vencimiento Actual:</strong>
+                    <strong>📅 Vencimiento de referencia:</strong>
                     <span id="renewCurrentExpiry" class="date-display">-</span><br />
-                    <small style="color: var(--text-secondary)">Selecciona cuántos meses deseas agregar a todas las
-                        plataformas
-                        activas</small>
+                    <small style="color: var(--text-secondary)">Es la fecha que ya tenían las plataformas tildadas
+                        para renovar. No se mueve por el día en que el cliente efectivamente pague.</small>
                 </div>
 
+                <h3 style="margin-bottom: 12px; color: var(--accent-primary); font-size: 16px;">
+                    📺 Plataformas Actuales
+                </h3>
+                <small style="color: var(--text-secondary); display: block; margin-bottom: 10px;">Tildá las que el
+                    cliente renueva ahora</small>
+                <div id="renewExistingList"></div>
+
+                <h3 style="margin: 22px 0 12px 0; color: var(--accent-success); font-size: 16px;">
+                    ➕ Agregar Nuevas
+                </h3>
+                <small style="color: var(--text-secondary); display: block; margin-bottom: 10px;">Tildá si además
+                    contrata alguna plataforma nueva (queda con la misma fecha que las de arriba)</small>
+                <div id="renewAddList"></div>
+
                 <h3 style="
-                margin-bottom: 15px;
+                margin: 25px 0 15px 0;
                 color: var(--accent-primary);
                 font-size: 16px;
               ">
-                    Selecciona la Duración:
+                    Duración (aplica a todo lo tildado):
                 </h3>
 
                 <div class="renewal-option" onclick="selectRenewalMonths(1)" id="renewOption1">
                     <div class="renewal-months">1 Mes</div>
-                    <div class="renewal-price">Sin descuento</div>
+                    <div class="renewal-price">Posible descuento por cantidad</div>
                 </div>
 
                 <div class="renewal-option" onclick="selectRenewalMonths(2)" id="renewOption2">
@@ -726,21 +893,52 @@
 
                 <input type="hidden" id="selectedRenewalMonths" value="" />
 
-                <div class="summary-box" id="renewalSummary" style="display: none; margin-top: 20px">
-                    <h4 style="margin-bottom: 10px; color: var(--accent-primary)">
-                        📊 Resumen de Renovación
-                    </h4>
-                    <div class="detail-row">
-                        <span class="detail-label">Nueva fecha de vencimiento:</span>
-                        <span class="detail-value" id="renewalNewDate" style="color: var(--accent-success)">-</span>
-                    </div>
-                </div>
+                <div class="summary-box" id="renewalSummary" style="display: none; margin-top: 20px"></div>
 
                 <div style="margin-top: 25px; display: flex; gap: 10px">
                     <button class="btn btn-warning" onclick="confirmRenewal()" style="flex: 2; font-size: 16px">
                         ✅ Confirmar Renovación
                     </button>
                     <button class="btn btn-secondary" onclick="closeModal('renewClientModal')" style="flex: 1">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Cambiar Fecha de Vencimiento (corrección manual) -->
+        <div id="changeExpiryModal" class="modal">
+            <div class="modal-content" style="max-width: 420px">
+                <div class="modal-header">
+                    <h2 style="color: var(--accent-primary)">📅 Cambiar Fecha de Vencimiento</h2>
+                    <button class="close-btn" onclick="closeModal('changeExpiryModal')">
+                        &times;
+                    </button>
+                </div>
+
+                <div class="info-box" style="margin-bottom: 20px">
+                    <strong id="changeExpiryPlatformLabel">Plataforma</strong><br />
+                    <small style="color: var(--text-secondary)">Usá esto solo para corregir una fecha mal cargada.
+                        No recalcula precios ni cobra nada.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="field-label-required">Nueva fecha de vencimiento</label>
+                    <input type="date" id="changeExpiryDateInput" required />
+                </div>
+
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px">
+                    <input type="checkbox" id="changeExpiryApplyAll"
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);" />
+                    <label for="changeExpiryApplyAll" style="margin: 0; cursor: pointer;">Aplicar esta fecha a
+                        todas las plataformas de este cliente</label>
+                </div>
+
+                <div style="margin-top: 25px; display: flex; gap: 10px">
+                    <button class="btn btn-primary" onclick="confirmChangeExpiryDate()" style="flex: 2">
+                        💾 Guardar Fecha
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('changeExpiryModal')" style="flex: 1">
                         Cancelar
                     </button>
                 </div>
