@@ -2042,6 +2042,9 @@
                         <button class="btn btn-secondary" onclick="editClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
                             ✏️ Editar
                         </button>
+                        <button class="btn btn-primary" onclick="viewClientDetails('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
+                            👁️ Ver Detalles
+                        </button>
                         <button class="btn btn-warning" onclick="renewClient('${client.pin}')" style="flex: 1; padding: 10px; font-size: 13px;">
                             🔄 Renovar
                         </button>
@@ -2990,16 +2993,78 @@
                         <span style="color: var(--text-secondary); font-size: 12px;">🔑 Contraseña:</span>
                         <span style="font-size: 13px; font-family: monospace;">${ass.password}</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                         <span style="color: var(--text-secondary); font-size: 12px;">⏰ Vencimiento:</span>
                         <span style="font-size: 13px; color: var(--warning);" class="date-display">${formatDate(ass.expiryDate)}</span>
                     </div>
+                    <button class="btn btn-secondary" onclick="copyAssignmentCredentials(${client.assignments.indexOf(ass)})" style="width: 100%; padding: 6px; font-size: 11px;">
+                        📋 Copiar Correo y Contraseña
+                    </button>
                 </div>
             `;
                 container.appendChild(card);
             });
 
             openModal("viewClientModal");
+        }
+
+        // Formatea el correo y contraseña de una plataforma, listos para pegar
+        function formatAssignmentCredentials(ass) {
+            const platformLabel = platformHasSubtypes(ass.platform) ? `${ass.platform} (${ass.deviceType})` : ass.platform;
+            return `${platformLabel}\nCorreo: ${ass.accountEmail}\nContraseña: ${ass.password}`;
+        }
+
+        // Copia al portapapeles, con respaldo por si el navegador no soporta
+        // navigator.clipboard (ej: página servida sin HTTPS)
+        function copyToClipboard(text, successMessage) {
+            const done = () => showNotification(successMessage || "✅ Copiado al portapapeles", "success");
+            const fallback = () => {
+                try {
+                    const textarea = document.createElement("textarea");
+                    textarea.value = text;
+                    textarea.style.position = "fixed";
+                    textarea.style.opacity = "0";
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(textarea);
+                    done();
+                } catch (err) {
+                    alert("⚠️ No se pudo copiar automáticamente. Copiá el texto a mano.");
+                }
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(fallback);
+            } else {
+                fallback();
+            }
+        }
+
+        // Copia correo y contraseña de UNA plataforma puntual del cliente que se está viendo
+        function copyAssignmentCredentials(assignmentIndex) {
+            const client = appData.clients.find((c) => c.pin === currentViewPin);
+            if (!client) return;
+            const ass = client.assignments[assignmentIndex];
+            if (!ass) return;
+
+            copyToClipboard(formatAssignmentCredentials(ass), `✅ Copiado: ${ass.platform}`);
+        }
+
+        // Copia correo y contraseña de TODAS las plataformas del cliente que se está
+        // viendo, separadas por el nombre de cada plataforma y un espacio entre ellas
+        function copyAllClientCredentials() {
+            const client = appData.clients.find((c) => c.pin === currentViewPin);
+            if (!client || !client.assignments || client.assignments.length === 0) {
+                alert("⚠️ Este cliente no tiene plataformas contratadas.");
+                return;
+            }
+
+            const sortedAssignments = [...client.assignments].sort((a, b) => getDaysRemaining(b.expiryDate) - getDaysRemaining(a.expiryDate));
+            const text = sortedAssignments.map(formatAssignmentCredentials).join("\n\n");
+
+            copyToClipboard(text, `✅ Copiadas ${sortedAssignments.length} plataforma${sortedAssignments.length > 1 ? "s" : ""} de ${client.name}`);
         }
 
         function renewClient(pin) {
