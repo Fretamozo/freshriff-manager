@@ -791,13 +791,14 @@
                     </div>
                 </div>
 
-                <h3 style="
-                margin-bottom: 15px;
-                color: var(--accent-primary);
-                font-size: 16px;
-              ">
-                    📺 Plataformas Contratadas
-                </h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: var(--accent-primary); font-size: 16px; margin: 0;">
+                        📺 Plataformas Contratadas
+                    </h3>
+                    <button class="btn btn-secondary" onclick="copyAllClientCredentials()" style="padding: 6px 12px; font-size: 12px;">
+                        📋 Copiar Todo
+                    </button>
+                </div>
                 <div id="viewClientPlatforms"></div>
 
                 <div style="margin-top: 25px; display: flex; gap: 10px">
