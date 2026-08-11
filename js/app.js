@@ -507,6 +507,30 @@
             if (sectionId === "platformsCatalog") renderCustomPlatformsCatalog();
         }
 
+        // Muestra un cliente puntual en la sección "Clientes" tal como si se
+        // hubiera escrito su PIN en la barra de búsqueda: navega a la sección,
+        // carga el PIN en el buscador, dispara searchClients() y hace scroll
+        // hasta el desglose. Se usa desde las alertas del dashboard y desde los
+        // perfiles ocupados en Cuentas.
+        function showClientInClientsSection(pin) {
+            document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
+            document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
+            document.getElementById("clients").classList.add("active");
+
+            const clientsTab = document.querySelector('.nav-tab[onclick*="showSection(\'clients\')"]');
+            if (clientsTab) clientsTab.classList.add("active");
+
+            renderClients();
+
+            const searchInput = document.getElementById("clientSearch");
+            if (!searchInput) return;
+            searchInput.value = pin;
+            searchClients();
+
+            const resultsDiv = document.getElementById("searchResults");
+            if (resultsDiv) resultsDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
         function openModal(modalId) {
             document.getElementById(modalId).classList.add("active");
             if (modalId === "accountModal") {
@@ -1107,14 +1131,20 @@
         }
 
         // Grilla de perfiles (numeritos clickeables) de UNA cuenta puntual.
+        // Los perfiles ocupados se colorean según el vencimiento de ESE perfil puntual
+        // (no del cliente en general): así, si un cliente tiene Netflix vencido pero
+        // Disney+ todavía vigente, cada plataforma muestra su propio color.
         function buildProfileSlotsHtml(account) {
             let html = '<div class="profile-slots">';
             account.profiles.forEach((profile, idx) => {
                 let className, title, clickHandler;
                 if (profile.occupied) {
-                    className = "slot-occupied";
-                    title = `Ocupado por PIN: ${profile.clientId}`;
-                    clickHandler = "";
+                    const days = getDaysRemaining(profile.expiryDate);
+                    const status = getStatusByDays(days);
+                    className = status.color === "success" ? "slot-occupied-success" : status.color === "warning" ? "slot-occupied-warning" : "slot-occupied-danger";
+                    const daysText = days <= 0 ? "Vencido" : `${days} día${days === 1 ? "" : "s"} restantes`;
+                    title = `Ocupado por PIN: ${profile.clientId} • ${daysText} (click para ver cliente)`;
+                    clickHandler = profile.clientId ? `onclick="showClientInClientsSection('${profile.clientId}')"` : "";
                 } else if (profile.blocked) {
                     className = "slot-blocked";
                     title = "🔒 No se vende (click para habilitar)";
@@ -1885,24 +1915,32 @@
             }
 
             sortedClients.forEach((client) => {
-                const allDays = client.assignments.map((a) => getDaysRemaining(a.expiryDate));
-                const daysLeft = Math.min(...allDays);
-                const status = getStatusByDays(daysLeft);
-                const platforms = [...new Set(client.assignments.map((a) => a.platform))];
+                // ⚠️ Un cliente puede quedarse sin asignaciones (si se le quitan todas
+                // las plataformas sin eliminarlo). Antes esto rompía el .reduce() de
+                // abajo con "Reduce of empty array" y cortaba el resto del listado a
+                // mitad de camino — por eso se manejan por separado con hasAssignments.
+                const hasAssignments = client.assignments && client.assignments.length > 0;
+                const daysLeft = getClientDaysLeft(client);
+                const status = hasAssignments ? getStatusByDays(daysLeft) : { class: "badge-warning", text: "Sin plataformas" };
+                const platforms = hasAssignments ? [...new Set(client.assignments.map((a) => a.platform))] : [];
                 const lastName = client.lastName || client.name.split(" ").pop();
                 const firstName = client.firstName || client.name.replace(" " + lastName, "");
-                const nearestExpiry = client.assignments.reduce((nearest, a) =>
-                    new Date(a.expiryDate) < new Date(nearest.expiryDate) ? a : nearest
-                ).expiryDate;
+                const nearestExpiry = hasAssignments
+                    ? client.assignments.reduce((nearest, a) =>
+                        new Date(a.expiryDate) < new Date(nearest.expiryDate) ? a : nearest
+                      ).expiryDate
+                    : null;
 
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                 <td><strong style="font-family: monospace; font-size: 16px; color: var(--accent-danger);">${client.pin}</strong></td>
                 <td><strong>${lastName}</strong>, ${firstName}</td>
-                <td>${platforms.map((p) => PLATFORM_CONFIG[p].icon).join(" ")} (${platforms.length})</td>
+                <td>${hasAssignments ? `${platforms.map((p) => PLATFORM_CONFIG[p].icon).join(" ")} (${platforms.length})` : "—"}</td>
                 <td>
-                    <span class="date-display">${formatDate(nearestExpiry)}</span><br>
-                    <small style="color: ${daysLeft <= 3 ? "var(--accent-danger)" : daysLeft <= 10 ? "var(--warning)" : "var(--success)"};">${daysLeft <= 0 ? "Vencido" : daysLeft + " días"}</small>
+                    ${hasAssignments
+                        ? `<span class="date-display">${formatDate(nearestExpiry)}</span><br>
+                    <small style="color: ${daysLeft <= 3 ? "var(--accent-danger)" : daysLeft <= 10 ? "var(--warning)" : "var(--success)"};">${daysLeft <= 0 ? "Vencido" : daysLeft + " días"}</small>`
+                        : `<small style="color: var(--text-secondary);">—</small>`}
                 </td>
                 <td><span class="badge ${status.class}">${status.text}</span></td>
                 <td>
@@ -3651,8 +3689,10 @@
                     const days = Math.min(...client.assignments.map((a) => getDaysRemaining(a.expiryDate)));
                     const status = getStatusByDays(days);
                     const alert = document.createElement("div");
-                    alert.className = "card";
+                    alert.className = "card expiry-alert-card";
                     alert.style.cssText = `border-left: 4px solid var(--${status.color}); margin-bottom: 10px;`;
+                    alert.title = "Ver ficha de este cliente";
+                    alert.onclick = () => showClientInClientsSection(client.pin);
                     alert.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
