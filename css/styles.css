@@ -436,6 +436,17 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
+        .expiry-alert-card {
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .expiry-alert-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+            border-color: var(--accent-primary);
+        }
+
         .card-header {
             display: flex;
             justify-content: space-between;
@@ -661,10 +672,25 @@
             color: var(--accent-primary);
         }
 
-        .slot-occupied {
+        /* Perfil ocupado, vencido o por vencer en breve (crítico) */
+        .slot-occupied-danger {
             background: rgba(239, 68, 68, 0.15);
             border-color: var(--accent-danger);
             color: var(--accent-danger);
+        }
+
+        /* Perfil ocupado, próximo a vencer pero todavía con margen */
+        .slot-occupied-warning {
+            background: rgba(245, 158, 11, 0.15);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        /* Perfil ocupado y con tiempo de sobra */
+        .slot-occupied-success {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: var(--accent-success);
+            color: var(--accent-success);
         }
 
         .slot-blocked {
