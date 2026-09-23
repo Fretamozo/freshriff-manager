@@ -994,23 +994,34 @@
             const account = appData.accounts.find((a) => a.id === id);
 
             if (account) {
+                const oldEmail = account.email;
                 const oldPassword = account.password;
+                const newEmail = document.getElementById("editAccEmail").value;
                 const newPassword = document.getElementById("editAccPassword").value;
 
-                account.email = document.getElementById("editAccEmail").value;
+                account.email = newEmail;
                 account.password = newPassword;
                 account.pricePerProfile = parseFloat(document.getElementById("editAccPrice").value);
                 account.cost = parseFloat(document.getElementById("editAccCost").value);
                 account.nextPayment = document.getElementById("editAccNextPayment").value;
 
-                // Propagar nueva contraseña a todos los clientes que tengan esta cuenta
+                // 🔧 CORRECCIÓN: propagar el email nuevo (y la contraseña) a las
+                // asignaciones de clientes que apuntan a esta cuenta. Antes esto
+                // comparaba contra account.email YA sobreescrito, así que si cambiabas
+                // el email nunca encontraba nada que actualizar: la asignación del
+                // cliente quedaba con el email viejo. Después, al quitar/renovar/mover
+                // esa plataforma, ya no se encontraba la cuenta por email y el perfil
+                // nunca se liberaba en "📺 Cuentas" aunque se borrara del cliente.
+                const emailChanged = newEmail !== oldEmail;
+                const passwordChanged = newPassword !== oldPassword;
                 let clientsUpdated = 0;
-                if (newPassword !== oldPassword) {
+                if (emailChanged || passwordChanged) {
                     appData.clients.forEach((client) => {
                         client.assignments.forEach((ass) => {
-                            if (ass.accountEmail === account.email && ass.platform === account.platform) {
+                            if (ass.accountEmail === oldEmail && ass.platform === account.platform) {
                                 if (platformHasSubtypes(account.platform) && ass.deviceType !== account.deviceType) return;
-                                ass.password = newPassword;
+                                if (emailChanged) ass.accountEmail = newEmail;
+                                if (passwordChanged) ass.password = newPassword;
                                 clientsUpdated++;
                             }
                         });
@@ -1020,9 +1031,10 @@
                 saveData().then(() => {
                     closeModal("editAccountModal");
                     updateAllViews();
-                    const msg = clientsUpdated > 0
-                        ? `✅ Cuenta actualizada\n🔑 Contraseña actualizada en ${clientsUpdated} suscripción(es) de clientes`
-                        : "✅ Cuenta actualizada exitosamente";
+                    const parts = [];
+                    if (emailChanged && clientsUpdated > 0) parts.push(`📧 Email actualizado en ${clientsUpdated} suscripción(es) de clientes`);
+                    if (passwordChanged && clientsUpdated > 0) parts.push(`🔑 Contraseña actualizada en ${clientsUpdated} suscripción(es) de clientes`);
+                    const msg = parts.length > 0 ? `✅ Cuenta actualizada\n${parts.join("\n")}` : "✅ Cuenta actualizada exitosamente";
                     showNotification(msg, "success");
                 });
             }
@@ -1047,6 +1059,65 @@
                     alert("✅ Cuenta eliminada");
                 });
             }
+        }
+
+        // ========== Auditoría / reparación de perfiles huérfanos ==========
+        // Detecta perfiles marcados como "ocupados" en una cuenta cuyo cliente ya no
+        // tiene una asignación real que los respalde (típicamente, restos del bug de
+        // "editar email de cuenta" corregido arriba, de antes de este parche).
+        function auditOrphanedProfiles() {
+            const issues = [];
+
+            appData.accounts.forEach((account) => {
+                account.profiles.forEach((profile) => {
+                    if (!profile.occupied || !profile.clientId) return;
+
+                    const client = appData.clients.find((c) => c.pin === profile.clientId);
+                    const hasMatchingAssignment = !!(client && client.assignments.some((ass) => {
+                        if (ass.platform !== account.platform) return false;
+                        if (platformHasSubtypes(account.platform) && ass.deviceType !== account.deviceType) return false;
+                        return ass.profileNumber === profile.number;
+                    }));
+
+                    if (!client || !hasMatchingAssignment) {
+                        issues.push({ account, profile });
+                    }
+                });
+            });
+
+            return issues;
+        }
+
+        function reviewAndRepairAccounts() {
+            const issues = auditOrphanedProfiles();
+
+            if (issues.length === 0) {
+                alert("✅ No se encontraron perfiles huérfanos. Las cuentas están sincronizadas correctamente con los clientes.");
+                return;
+            }
+
+            let msg = `⚠️ Se encontraron ${issues.length} perfil(es) marcados como ocupados sin una asignación real de cliente:\n\n`;
+            issues.slice(0, 15).forEach(({ account, profile }) => {
+                const client = appData.clients.find((c) => c.pin === profile.clientId);
+                const clientLabel = client ? `${client.name} (PIN ${profile.clientId})` : `PIN ${profile.clientId} (cliente inexistente)`;
+                const deviceLabel = platformHasSubtypes(account.platform) ? ` (${account.deviceType})` : "";
+                msg += `• ${account.platform}${deviceLabel} — ${account.email} — Perfil #${profile.number} — ocupado por ${clientLabel}\n`;
+            });
+            if (issues.length > 15) msg += `... y ${issues.length - 15} más\n`;
+            msg += "\n¿Liberar estos perfiles ahora? Esto NO borra ni modifica datos de los clientes, solo libera el cupo en 📺 Cuentas.";
+
+            if (!confirm(msg)) return;
+
+            issues.forEach(({ profile }) => {
+                profile.occupied = false;
+                profile.clientId = null;
+                profile.expiryDate = null;
+            });
+
+            saveData().then(() => {
+                updateAllViews();
+                showNotification(`✅ ${issues.length} perfil(es) liberado(s) correctamente`, "success");
+            });
         }
 
         function quickUpdatePrice(accountId, newPrice) {
@@ -2310,16 +2381,8 @@
                 if (!ass) return;
                 ass.expiryDate = newIso;
 
-                const account = appData.accounts.find((a) => {
-                    if (platformHasSubtypes(ass.platform)) {
-                        return a.email === ass.accountEmail && a.platform === ass.platform && a.deviceType === ass.deviceType;
-                    }
-                    return a.email === ass.accountEmail && a.platform === ass.platform;
-                });
-                if (account) {
-                    const profile = account.profiles.find((p) => p.number === ass.profileNumber && p.clientId === client.pin);
-                    if (profile) profile.expiryDate = newIso;
-                }
+                const found = findAssignedProfile(client, ass);
+                if (found) found.profile.expiryDate = newIso;
             });
 
             saveData().then(() => {
@@ -2374,19 +2437,11 @@
             }
 
             // Liberar perfil en cuenta origen
-            const sourceAccount = appData.accounts.find((a) => {
-                if (platformHasSubtypes(ass.platform)) {
-                    return a.email === ass.accountEmail && a.platform === ass.platform && a.deviceType === ass.deviceType;
-                }
-                return a.email === ass.accountEmail && a.platform === ass.platform;
-            });
-            if (sourceAccount) {
-                const sourceProfile = sourceAccount.profiles.find((p) => p.number === ass.profileNumber && p.clientId === client.pin);
-                if (sourceProfile) {
-                    sourceProfile.occupied = false;
-                    sourceProfile.clientId = null;
-                    sourceProfile.expiryDate = null;
-                }
+            const sourceFound = findAssignedProfile(client, ass);
+            if (sourceFound) {
+                sourceFound.profile.occupied = false;
+                sourceFound.profile.clientId = null;
+                sourceFound.profile.expiryDate = null;
             }
 
             // Ocupar perfil en cuenta destino
@@ -2406,6 +2461,57 @@
             });
         }
 
+        // ========== Helper robusto: ubicar la cuenta/perfil real de una asignación ==========
+        // El match "de libro" es por accountEmail + platform (+ deviceType) + profileNumber.
+        // Problema: si después se edita el EMAIL de la cuenta (✏️ Editar cuenta), el email
+        // guardado en la asignación del cliente queda viejo y ese match deja de encontrar
+        // la cuenta — el perfil nunca se libera aunque la asignación se borre del cliente.
+        // Por eso, si el match directo falla, buscamos por PIN del cliente + plataforma
+        // (+ deviceType) + número de perfil en TODAS las cuentas, y si aparece una sola
+        // coincidencia, además reparamos accountEmail en la asignación para que el
+        // próximo lookup ya sea directo.
+        function findAssignedProfile(client, assignment) {
+            const matchesAccountByEmail = (a) => {
+                if (platformHasSubtypes(assignment.platform)) {
+                    return a.email === assignment.accountEmail &&
+                        a.platform === assignment.platform &&
+                        a.deviceType === assignment.deviceType;
+                }
+                return a.email === assignment.accountEmail &&
+                    a.platform === assignment.platform;
+            };
+
+            let account = appData.accounts.find(matchesAccountByEmail);
+            let profile = account
+                ? account.profiles.find((p) => p.number === assignment.profileNumber && p.clientId === client.pin)
+                : null;
+
+            if (account && profile) return { account, profile };
+
+            // 🔧 Fallback por email desactualizado
+            const candidates = appData.accounts.filter((a) => {
+                if (a.platform !== assignment.platform) return false;
+                if (platformHasSubtypes(assignment.platform) && a.deviceType !== assignment.deviceType) return false;
+                return a.profiles.some((p) => p.number === assignment.profileNumber && p.clientId === client.pin);
+            });
+
+            if (candidates.length === 0) return null;
+            if (candidates.length > 1) {
+                console.warn("⚠️ Coincidencia ambigua buscando el perfil de una asignación:", assignment, candidates);
+            }
+
+            const foundAccount = candidates[0];
+            const foundProfile = foundAccount.profiles.find(
+                (p) => p.number === assignment.profileNumber && p.clientId === client.pin
+            );
+
+            if (foundAccount.email !== assignment.accountEmail) {
+                assignment.accountEmail = foundAccount.email; // auto-reparación
+            }
+
+            return { account: foundAccount, profile: foundProfile };
+        }
+
         // ========== FUNCIÓN CORREGIDA: Quitar plataforma de cliente ==========
         function removeEditAssignment(assignmentIndex) {
             const client = appData.clients.find((c) => c.pin === editingClientPin);
@@ -2417,34 +2523,15 @@
                 return;
             }
 
-            // 🔧 CORRECCIÓN: Buscar la cuenta correcta considerando también el deviceType para Netflix
-            const account = appData.accounts.find((a) => {
-                // Para Netflix, debemos coincidir también el deviceType
-                if (platformHasSubtypes(assignment.platform)) {
-                    return a.email === assignment.accountEmail &&
-                        a.platform === assignment.platform &&
-                        a.deviceType === assignment.deviceType;
-                }
-                // Para otras plataformas, email y plataforma son suficientes
-                return a.email === assignment.accountEmail &&
-                    a.platform === assignment.platform;
-            });
+            const found = findAssignedProfile(client, assignment);
 
-            if (account) {
-                // 🔧 CORRECCIÓN: Buscar el perfil específico por número Y por clientId
-                const profile = account.profiles.find(
-                    (p) => p.number === assignment.profileNumber && p.clientId === client.pin
-                );
-                if (profile) {
-                    profile.occupied = false;
-                    profile.clientId = null;
-                    profile.expiryDate = null;
-                } else {
-                    console.warn("Perfil no encontrado en la cuenta:", assignment);
-                }
+            if (found) {
+                found.profile.occupied = false;
+                found.profile.clientId = null;
+                found.profile.expiryDate = null;
             } else {
-                console.warn("Cuenta no encontrada para liberar perfil:", assignment);
-                alert("⚠️ No se encontró la cuenta asociada. El perfil se eliminó del cliente pero podría no estar liberado en la cuenta.");
+                console.warn("Cuenta/perfil no encontrado para liberar:", assignment);
+                alert("⚠️ No se encontró el perfil asociado en ninguna cuenta. Revisá '🔧 Verificar cuentas' en la sección Cuentas para liberarlo manualmente.");
             }
 
             client.assignments.splice(assignmentIndex, 1);
@@ -2494,22 +2581,8 @@
             assignment.startDate = baseDate.toISOString();
 
             // Buscar y actualizar el perfil en la cuenta
-            const account = appData.accounts.find((a) => {
-                if (platformHasSubtypes(assignment.platform)) {
-                    return a.email === assignment.accountEmail &&
-                        a.platform === assignment.platform &&
-                        a.deviceType === assignment.deviceType;
-                }
-                return a.email === assignment.accountEmail &&
-                    a.platform === assignment.platform;
-            });
-
-            if (account) {
-                const profile = account.profiles.find(
-                    (p) => p.number === assignment.profileNumber && p.clientId === client.pin
-                );
-                if (profile) profile.expiryDate = newEnd.toISOString();
-            }
+            const renewFound = findAssignedProfile(client, assignment);
+            if (renewFound) renewFound.profile.expiryDate = newEnd.toISOString();
 
             // Actualizar fecha de pago del cliente a hoy
             client.paymentDate = today.toISOString().split('T')[0];
