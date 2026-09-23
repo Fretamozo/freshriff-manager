@@ -130,9 +130,14 @@
                 <div class="card">
                     <div class="card-header">
                         <h2 class="section-title">📺 Gestión de Cuentas</h2>
-                        <button class="btn btn-primary" onclick="openModal('accountModal')">
-                            + Nueva Cuenta
-                        </button>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-warning" onclick="reviewAndRepairAccounts()" title="Busca perfiles marcados como ocupados que ya no corresponden a ninguna asignación real de cliente, y los libera">
+                                🔧 Verificar cuentas
+                            </button>
+                            <button class="btn btn-primary" onclick="openModal('accountModal')">
+                                + Nueva Cuenta
+                            </button>
+                        </div>
                     </div>
 
                     <div class="price-section">
