@@ -693,6 +693,19 @@
             color: var(--accent-success);
         }
 
+        .slot-wildcard {
+            position: relative;
+        }
+
+        .slot-wildcard::after {
+            content: "🔀";
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            font-size: 10px;
+            line-height: 1;
+        }
+
         .slot-blocked {
             background: rgba(148, 163, 184, 0.15);
             border-color: var(--text-secondary);
