@@ -54,6 +54,24 @@
             "Paramount+": { icon: "⛰️", color: "paramount", hasSubtypes: false, profiles: 6 },
         };
 
+        // 🔀 Perfiles "comodín": dentro del cupo YA existente de cada subtipo, algunos
+        // perfiles no quedan fijos a Smart o Común/Móvil-PC — se pueden mover de una
+        // cuenta a la otra (liberan cupo en una, ocupan cupo en la otra) según demanda.
+        // El número acá es cuántos de los perfiles de ESE subtipo (al crear la cuenta)
+        // arrancan marcados como comodín. No suma perfiles extra: Disney+ sigue
+        // arrancando en 2 Smart + 6 Común = 8 en total, pero 1 de esos 2 Smart y 1 de
+        // esos 6 Común son movibles entre sí (2 comodines en total, cada uno se mueve
+        // de forma independiente). Netflix arranca 3 Smart TV + 4 Móvil/PC = 7 en total,
+        // con 1 de esos 3 Smart TV como comodín.
+        const WILDCARD_CONFIG = {
+            Netflix: { "Smart TV": 1, "Móvil/PC": 0 },
+            "Disney+": { "Smart": 1, "Común": 1 },
+        };
+
+        function getWildcardCountFor(platform, deviceType) {
+            return (WILDCARD_CONFIG[platform] && WILDCARD_CONFIG[platform][deviceType]) || 0;
+        }
+
         // ¿Esta plataforma se vende dividida en subtipos (ej: Netflix Smart TV /
         // Móvil-PC, Disney+ Smart / Común)? Antes esto se preguntaba comparando
         // directamente contra el string "Netflix" en decenas de lugares del código;
@@ -261,6 +279,36 @@
             return true;
         }
 
+        // 🔀 MIGRACIÓN: marcar perfiles comodín en cuentas de Netflix/Disney+ que ya
+        // existían antes de esta función (creadas sin el campo `wildcard`). Para cada
+        // cuenta, si le faltan comodines según WILDCARD_CONFIG, marca perfiles libres
+        // primero (para no tocar nada de un cliente activo); si no alcanzan libres,
+        // marca ocupados también (marcar comodín no cambia si está ocupado o no, solo
+        // habilita que se pueda mover el día que se libere).
+        function migrateWildcardProfiles() {
+            let changed = false;
+
+            (appData.accounts || []).forEach((account) => {
+                if (!platformHasSubtypes(account.platform)) return;
+                const target = getWildcardCountFor(account.platform, account.deviceType);
+                if (target === 0) return;
+
+                const current = account.profiles.filter((p) => p.wildcard).length;
+                if (current >= target) return;
+
+                const needed = target - current;
+                const candidates = [...account.profiles.filter((p) => !p.wildcard)]
+                    .sort((a, b) => (a.occupied === b.occupied ? 0 : a.occupied ? 1 : -1));
+
+                candidates.slice(0, needed).forEach((p) => {
+                    p.wildcard = true;
+                    changed = true;
+                });
+            });
+
+            return changed;
+        }
+
         // 🔥 CARGAR desde Firebase
         function loadData() {
             return db.collection("appData").doc("main").get().then((doc) => {
@@ -274,9 +322,10 @@
                         platformLogos: data.platformLogos || {}
                     };
                     console.log("✅ Cargado desde Firebase");
-                    const migrated = migrateUnknownPlatforms();
+                    const migratedPlatforms = migrateUnknownPlatforms();
+                    const migratedWildcards = migrateWildcardProfiles();
                     rebuildPlatformConfig();
-                    if (migrated) saveData();
+                    if (migratedPlatforms || migratedWildcards) saveData();
                 } else {
                     // Intentar cargar desde localStorage como migración
                     const saved = localStorage.getItem("freshRiffData");
@@ -285,6 +334,7 @@
                         if (!appData.customPlatforms) appData.customPlatforms = [];
                         if (!appData.platformLogos) appData.platformLogos = {};
                         migrateUnknownPlatforms();
+                        migrateWildcardProfiles();
                         rebuildPlatformConfig();
                         // Guardar en Firebase para futuro
                         return saveData();
@@ -948,13 +998,18 @@
                 cost: parseFloat(document.getElementById("accCost").value),
                 pricePerProfile: parseFloat(document.getElementById("accPrice").value),
                 nextPayment: document.getElementById("accNextPayment").value,
-                profiles: Array(maxProfiles).fill(null).map((_, i) => ({
-                    number: i + 1,
-                    occupied: false,
-                    clientId: null,
-                    expiryDate: null,
-                    blocked: false,
-                })),
+                profiles: Array(maxProfiles).fill(null).map((_, i) => {
+                    const wildcardCount = getWildcardCountFor(platform, deviceType);
+                    return {
+                        number: i + 1,
+                        occupied: false,
+                        clientId: null,
+                        expiryDate: null,
+                        blocked: false,
+                        // 🔀 Los últimos N perfiles (según WILDCARD_CONFIG) arrancan como comodín
+                        wildcard: i >= maxProfiles - wildcardCount,
+                    };
+                }),
             };
 
             appData.accounts.push(newAccount);
@@ -1225,7 +1280,9 @@
                     title = "Disponible (click para no vender este perfil)";
                     clickHandler = `onclick="toggleProfileBlock(${account.id}, ${profile.number})"`;
                 }
-                html += `<div class="profile-slot ${className}" title="${title}" ${clickHandler}>${idx + 1}</div>`;
+                const wildcardClass = profile.wildcard ? " slot-wildcard" : "";
+                const wildcardTitle = profile.wildcard ? " • 🔀 Comodín (puede moverse a la otra sección)" : "";
+                html += `<div class="profile-slot ${className}${wildcardClass}" title="${title}${wildcardTitle}" ${clickHandler}>${idx + 1}</div>`;
             });
             html += "</div>";
             return html;
@@ -1292,12 +1349,16 @@
             orderedAccounts.forEach((account, idx) => {
                 const sellableProfiles = account.profiles.filter(isProfileSellable).length;
                 const blockedProfiles = account.profiles.filter((p) => !p.occupied && p.blocked).length;
+                const wildcardProfiles = account.profiles.filter((p) => p.wildcard);
+                const freeWildcardCount = wildcardProfiles.filter(isProfileSellable).length;
+                const hasWildcardConfig = getWildcardCountFor(account.platform, account.deviceType) > 0 || wildcardProfiles.length > 0;
                 sectionsHtml += `
                 <div class="account-subsection"${idx > 0 ? ' style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed rgba(59, 130, 246, 0.25);"' : ""}>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span class="platform-subtype">${account.deviceType}</span>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span class="highlight-primary" style="font-size: 12px;">💰 $${account.pricePerProfile.toFixed(2)}/perfil</span>
+                            ${hasWildcardConfig ? `<button class="btn btn-secondary" onclick="moveWildcardProfile(${account.id})" style="padding: 4px 10px; font-size: 11px;" title="Mover un comodín libre hacia la otra sección">🔀</button>` : ""}
                             <button class="btn btn-secondary" onclick="editAccount(${account.id})" style="padding: 4px 10px; font-size: 11px;">✏️</button>
                         </div>
                     </div>
@@ -1305,6 +1366,7 @@
                     <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-secondary);">
                         <span>Próximo pago: <span class="date-display">${formatDate(account.nextPayment)}</span></span>
                         <div style="display: flex; gap: 6px;">
+                            ${wildcardProfiles.length > 0 ? `<span class="badge" style="background: rgba(168,85,247,0.15); color: #a855f7;">🔀 ${freeWildcardCount}/${wildcardProfiles.length} comodín</span>` : ""}
                             ${blockedProfiles > 0 ? `<span class="badge badge-warning">🔒 ${blockedProfiles} sin vender</span>` : ""}
                             <span class="badge ${sellableProfiles > 0 ? "badge-success" : "badge-danger"}">${sellableProfiles} libres</span>
                         </div>
@@ -1351,6 +1413,61 @@
         }
 
         // ========== CLIENTES ==========
+        // 🔀 Mover un perfil comodín LIBRE de esta cuenta hacia la cuenta pareja
+        // (mismo platform + mismo email, el otro deviceType). Libera un cupo acá y
+        // abre uno nuevo allá. Si no hay pareja creada todavía, avisa para crearla
+        // primero desde "+ Nueva Cuenta" con el mismo email.
+        function moveWildcardProfile(accountId) {
+            const account = appData.accounts.find((a) => a.id === accountId);
+            if (!account) return;
+
+            const subtypes = Object.keys((PLATFORM_CONFIG[account.platform] || {}).subtypes || {});
+            const otherDeviceType = subtypes.find((s) => s !== account.deviceType);
+            if (!otherDeviceType) {
+                alert("⚠️ Esta plataforma no tiene un subtipo pareja configurado.");
+                return;
+            }
+
+            const freeWildcard = account.profiles.find((p) => p.wildcard && isProfileSellable(p));
+            if (!freeWildcard) {
+                alert(`⚠️ No hay perfiles comodín libres en ${account.deviceType} para mover. Si alguno está ocupado, esperá a que se libere.`);
+                return;
+            }
+
+            const pairedAccount = appData.accounts.find(
+                (a) => a.platform === account.platform && a.email === account.email && a.deviceType === otherDeviceType
+            );
+            if (!pairedAccount) {
+                alert(`⚠️ Todavía no existe la cuenta de ${otherDeviceType} para ${account.email}. Creala primero desde "+ Nueva Cuenta" con el mismo email.`);
+                return;
+            }
+
+            if (!confirm(`¿Mover un perfil comodín de ${account.deviceType} a ${otherDeviceType}?\n\n${account.email}`)) {
+                return;
+            }
+
+            // Sacar el perfil de la cuenta actual
+            account.profiles = account.profiles.filter((p) => p !== freeWildcard);
+            account.maxProfiles = (account.maxProfiles || account.profiles.length + 1) - 1;
+
+            // Agregarlo a la cuenta pareja con un número que no choque con los existentes
+            const nextNumber = pairedAccount.profiles.reduce((max, p) => Math.max(max, p.number), 0) + 1;
+            pairedAccount.profiles.push({
+                number: nextNumber,
+                occupied: false,
+                clientId: null,
+                expiryDate: null,
+                blocked: false,
+                wildcard: true,
+            });
+            pairedAccount.maxProfiles = (pairedAccount.maxProfiles || pairedAccount.profiles.length - 1) + 1;
+
+            saveData().then(() => {
+                updateAllViews();
+                showNotification(`✅ Comodín movido: ${account.deviceType} → ${otherDeviceType}`, "success");
+            });
+        }
+
         function updateDatePreview(container, durationMonths) {
             const paymentDateInput = document.getElementById("clientPaymentDate");
             if (!paymentDateInput || !paymentDateInput.value) return;
